@@ -7,6 +7,12 @@ const authRoutes = require('./routes/authRoutes');
 const professionalRoutes = require('./routes/professionalRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
 const orderRoutes = require('./routes/orderRoutes');
+const messageRoutes = require('./routes/messageRoutes');
+
+const reviewRoutes = require('./routes/reviewRoutes');
+
+
+
 
 
 
@@ -23,6 +29,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/professionals', professionalRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/messages', messageRoutes);
+app.use('/api/reviews', reviewRoutes);
+
+
 // Conexão com MongoDB
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
