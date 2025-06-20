@@ -8,21 +8,32 @@ const professionalRoutes = require('./routes/professionalRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const messageRoutes = require('./routes/messageRoutes');
-
 const reviewRoutes = require('./routes/reviewRoutes');
 
-
-
-
-
+const path = require('path');
 
 dotenv.config();
 
 const app = express();
 
+const fs = require('fs');
+const uploadsDir = path.join(__dirname, 'uploads');
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
+
+
+
+
+
+
+
+
 // Middlewares
 app.use(cors());
 app.use(express.json());
+
 
 // Rotas
 app.use('/api/auth', authRoutes);
@@ -31,15 +42,13 @@ app.use('/api/services', serviceRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 
-// Conexão com MongoDB
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => {
-  console.log('MongoDB conectado');
-  app.listen(5000, () => console.log('Servidor rodando na porta 5000'));
-})
-.catch(err => console.error('Erro ao conectar com MongoDB:', err));
+// Conexão com MongoDB (atualizado)
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log('MongoDB conectado');
+    app.listen(5000, () => console.log('Servidor rodando na porta 5000'));
+  })
+  .catch(err => console.error('Erro ao conectar com MongoDB:', err));

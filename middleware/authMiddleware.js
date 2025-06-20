@@ -1,8 +1,8 @@
-// middleware/authMiddleware.js
+// backend/middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-module.exports = async (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -12,10 +12,18 @@ module.exports = async (req, res, next) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-password');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET); // sua secret
+    // Pega o usuário do token e adiciona no req para usar nas rotas
+    const user = await User.findById(decoded.id).select('-password');
+    if (!user) {
+      return res.status(401).json({ message: 'Usuário não encontrado' });
+    }
+    req.user = user;
     next();
   } catch (err) {
+    console.error('Erro no token JWT:', err);
     return res.status(401).json({ message: 'Token inválido' });
   }
 };
+
+module.exports = authMiddleware;
