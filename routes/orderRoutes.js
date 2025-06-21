@@ -1,8 +1,7 @@
-/// routes/orderRoutes.js
 const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
-const auth = require('../middleware/authMiddleware');
+const auth = require('../middleware/authMiddleware'); // certifique-se que o middleware se chama authMiddleware.js e exporta auth
 
 // Criar pedido
 router.post('/', auth, async (req, res) => {
@@ -14,7 +13,7 @@ router.post('/', auth, async (req, res) => {
       professional: professionalId,
       service,
       location,
-      status: 'pendente', // opcional: definir status inicial
+      status: 'pendente',
     });
 
     await order.save();
@@ -43,7 +42,7 @@ router.get('/my', auth, async (req, res) => {
   }
 });
 
-// **Adicionar rota para atualizar status do pedido**
+// Atualizar status do pedido
 router.patch('/:id/status', auth, async (req, res) => {
   try {
     const { status } = req.body;
@@ -53,12 +52,10 @@ router.patch('/:id/status', auth, async (req, res) => {
       return res.status(404).json({ message: 'Pedido não encontrado' });
     }
 
-    // Opcional: só o profissional do pedido pode atualizar o status
     if (order.professional.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Acesso negado' });
     }
 
-    // Validar status, por exemplo:
     const validStatuses = ['pendente', 'aceito', 'recusado', 'concluído'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ message: 'Status inválido' });
@@ -70,6 +67,28 @@ router.patch('/:id/status', auth, async (req, res) => {
     res.json(order);
   } catch (err) {
     res.status(500).json({ message: 'Erro ao atualizar status do pedido' });
+  }
+});
+
+// Deletar pedido - só cliente dono pode deletar
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const userId = req.user._id.toString(); // Correção aqui
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+
+    // Verifica se o cliente do pedido é o mesmo usuário autenticado
+    if (order.client.toString() !== userId) {
+      return res.status(403).json({ message: 'Sem permissão para deletar este pedido' });
+    }
+
+    await order.deleteOne(); // Alternativa ao deprecated `.remove()`
+    return res.status(200).json({ message: 'Pedido deletado com sucesso' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Erro ao deletar pedido' });
   }
 });
 
