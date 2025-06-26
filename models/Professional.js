@@ -1,18 +1,17 @@
 const mongoose = require('mongoose');
 
-const ProfessionalSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  services: [String],
-  description: String,
-  price: Number,
-  address: String,
+const professionalSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  specialty: String,
   location: {
     type: { type: String, enum: ['Point'], default: 'Point' },
-    coordinates: { type: [Number], default: [0, 0] },
+    coordinates: { type: [Number], required: true }, // [longitude, latitude]
   },
-  photos: [String], // URLs/caminhos das fotos
+  paid: { type: Boolean, default: false },
 }, { timestamps: true });
 
-ProfessionalSchema.index({ location: '2dsphere' });
+professionalSchema.index({ location: '2dsphere' });
 
-module.exports = mongoose.model('Professional', ProfessionalSchema);
+module.exports = mongoose.model('Professional', professionalSchema);

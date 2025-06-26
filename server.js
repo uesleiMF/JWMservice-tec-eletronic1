@@ -1,54 +1,37 @@
 // backend/server.js
 const express = require('express');
+const http = require('http');
 const mongoose = require('mongoose');
-const dotenv = require('dotenv');
 const cors = require('cors');
+const socketIo = require('socket.io');
+const dotenv = require('dotenv');
+const paymentRoutes = require('./routes/paymentRoutes');
+const protectedRoutes = require('./routes/protectedRoutes');
 const authRoutes = require('./routes/authRoutes');
 const professionalRoutes = require('./routes/professionalRoutes');
-const serviceRoutes = require('./routes/serviceRoutes');
-const orderRoutes = require('./routes/orderRoutes');
-const messageRoutes = require('./routes/messageRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
-
-const path = require('path');
+const orderRoutes = require('./routes/orderRoutes');
+const { setupSocket } = require('./controllers/chatController');
 
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, { cors: { origin: '*' } });
 
-const fs = require('fs');
-const uploadsDir = path.join(__dirname, 'uploads');
+setupSocket(io);
 
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-
-
-
-
-
-
-
-
-// Middlewares
 app.use(cors());
 app.use(express.json());
 
+mongoose.connect(process.env.MONGO_URI).then(() => console.log('Mongo conectado'));
 
-// Rotas
-app.use('/api/auth', authRoutes);
-app.use('/api/professionals', professionalRoutes);
-app.use('/api/services', serviceRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/api/reviews', reviewRoutes);
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api', authRoutes);
+app.use('/api', paymentRoutes);
+app.use('/api', protectedRoutes);
+app.use('/api', professionalRoutes);
+app.use('/api', reviewRoutes);
+app.use('/api', orderRoutes);
 
-
-// Conexão com MongoDB (atualizado)
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('MongoDB conectado');
-    app.listen(5000, () => console.log('Servidor rodando na porta 5000'));
-  })
-  .catch(err => console.error('Erro ao conectar com MongoDB:', err));
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
