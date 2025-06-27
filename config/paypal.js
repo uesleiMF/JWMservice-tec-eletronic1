@@ -1,7 +1,10 @@
-const paypal = require('@paypal/checkout-server-sdk');
-const Environment = paypal.core.SandboxEnvironment;
-const paypalClient = new paypal.core.PayPalHttpClient(
-  new Environment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_CLIENT_SECRET)
-);
+const checkoutNodeJssdk = require('@paypal/checkout-server-sdk');
 
-module.exports = paypalClient;
+const environment =
+  process.env.PAYPAL_MODE === 'live'
+    ? new checkoutNodeJssdk.core.LiveEnvironment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_CLIENT_SECRET)
+    : new checkoutNodeJssdk.core.SandboxEnvironment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_CLIENT_SECRET);
+
+const client = new checkoutNodeJssdk.core.PayPalHttpClient(environment);
+
+module.exports = client;

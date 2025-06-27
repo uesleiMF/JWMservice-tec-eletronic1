@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middlewares/authMiddleware');
-const { getConversation } = require('../controllers/messageController');
 
-router.get('/:otherUserId', protect, getConversation);
+router.get('/me', protect, (req, res) => {
+  res.json(req.user);
+});
 
 module.exports = router;
