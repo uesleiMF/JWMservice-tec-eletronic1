@@ -84,3 +84,13 @@ exports.getProfessionalServices = async (req, res) => {
     res.status(500).json({ error: 'Erro ao buscar serviços' });
   }
 };
+
+// Nova função para pegar os serviços do cliente logado
+exports.getClientServices = async (req, res) => {
+  try {
+    const services = await ServiceRequest.find({ client: req.user._id }).sort({ createdAt: -1 });
+    res.json(services);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar serviços do cliente' });
+  }
+};

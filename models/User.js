@@ -1,24 +1,19 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
-const userSchema = new mongoose.Schema({
+const UserSchema = new mongoose.Schema({
   name: String,
   email: { type: String, unique: true },
-  password: String,
-  phone: String,
+  passwordHash: String,
   role: { type: String, enum: ['cliente', 'profissional'], required: true },
-  cpfCnpj: String,
-  serviceAreas: [String],
-  description: String,
-  availability: [{
-    day: String,
-    from: String,
-    to: String
-  }],
-  location: {
-    address: String,
-    coordinates: { type: [Number], index: '2dsphere' }
-  },
-  paypalAccount: String,
-}, { timestamps: true });
+});
 
-module.exports = mongoose.model('User', userSchema);
+UserSchema.methods.setPassword = async function (password) {
+  this.passwordHash = await bcrypt.hash(password, 10);
+};
+
+UserSchema.methods.validatePassword = async function (password) {
+  return bcrypt.compare(password, this.passwordHash);
+};
+
+module.exports = mongoose.model('User', UserSchema);

@@ -1,8 +1,0 @@
-const express = require('express');
-const router = express.Router();
-const { protect } = require('../middlewares/authMiddleware');
-const { getConversation } = require('../controllers/messageController');
-
-router.get('/:otherUserId', protect, getConversation);
-
-module.exports = router;
