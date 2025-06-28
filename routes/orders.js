@@ -1,6 +1,26 @@
 const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
+
+// POST /api/orders
+router.post('/', async (req, res) => {
+    const { clienteId, profissionalId, servico } = req.body;
+    console.log('📦 Dados recebidos no pedido:', req.body); // 👈 ADICIONE ISSO
+    try {
+      const newOrder = new Order({
+        cliente: clienteId,
+        profissional: profissionalId,
+        servico,
+        status: 'pendente'
+      });
+  
+      await newOrder.save();
+      res.status(201).json(newOrder);
+    } catch (err) {
+      res.status(500).json({ message: 'Erro ao criar pedido' });
+    }
+  });
+  
 // GET /api/orders/professional/:id
 router.get('/professional/:id', async (req, res) => {
     try {

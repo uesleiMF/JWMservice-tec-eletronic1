@@ -1,14 +1,16 @@
 const express = require('express');
 const router = express.Router();
+const User = require('../models/User'); // modelo do usuário
 
-// Exemplo mockado
-router.get('/', (req, res) => {
-  const profissionais = [
-    { nome: 'João Eletricista', servico: 'Eletricista', latitude: -23.55, longitude: -46.63 },
-    { nome: 'Maria Encanadora', servico: 'Encanadora', latitude: -23.56, longitude: -46.62 },
-  ];
-
-  res.json(profissionais);
+// GET /api/profissionais — lista todos os profissionais
+router.get('/', async (req, res) => {
+  try {
+    const profissionais = await User.find({ role: 'profissional' }).select('name email');
+    res.json(profissionais);
+  } catch (err) {
+    console.error('Erro ao buscar profissionais:', err);
+    res.status(500).json({ message: 'Erro ao buscar profissionais' });
+  }
 });
 
 module.exports = router;
