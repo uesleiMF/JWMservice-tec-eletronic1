@@ -4,34 +4,117 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const authMiddleware = require('../middleware/authMiddleware');
 
+// ================= REGISTER =================
 router.post('/register', async (req, res) => {
-  const { name, email, password, role } = req.body;
-  const userExists = await User.findOne({ email });
-  if (userExists) return res.status(400).json({ message: 'Email já cadastrado' });
+  try {
+    const { 
+      name, 
+      email, 
+      password, 
+      role, 
+      phone, 
+      servico, 
+      latitude, 
+      longitude 
+    } = req.body;
 
-  const user = new User({ name, email, role });
-  await user.setPassword(password);
-  await user.save();
+    // Validações
+    if (!name || !email || !password || !role) {
+      return res.status(400).json({ message: 'Nome, email, senha e role são obrigatórios' });
+    }
 
-  res.status(201).json({ message: 'Usuário registrado com sucesso' });
+    if (!['cliente', 'profissional'].includes(role)) {
+      return res.status(400).json({ message: 'Role inválido' });
+    }
+
+    const exists = await User.findOne({ email });
+    if (exists) {
+      return res.status(400).json({ message: 'Email já cadastrado' });
+    }
+
+    const user = new User({
+      name,
+      email,
+      role,
+      phone: phone || null,
+      servico: role === 'profissional' ? servico : null,
+      latitude: latitude ? parseFloat(latitude) : null,
+      longitude: longitude ? parseFloat(longitude) : null,
+    });
+
+    await user.setPassword(password);
+    await user.save();
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '1d' }
+    );
+
+    res.status(201).json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        servico: user.servico,
+        latitude: user.latitude,
+        longitude: user.longitude
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erro no registro' });
+  }
 });
 
+// ================= LOGIN =================
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  const user = await User.findOne({ email });
-  if (!user) return res.status(400).json({ message: 'Usuário não encontrado' });
+  try {
+    const { email, password } = req.body;
 
-  const valid = await user.validatePassword(password);
-  if (!valid) return res.status(400).json({ message: 'Senha incorreta' });
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email e senha são obrigatórios' });
+    }
 
-  const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ message: 'Usuário não encontrado' });
+    }
 
-  res.json({
-    token,
-    user: { id: user._id, name: user.name, email: user.email, role: user.role }
-  });
+    const valid = await user.validatePassword(password);
+    if (!valid) {
+      return res.status(400).json({ message: 'Senha incorreta' });
+    }
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '1d' }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        servico: user.servico,
+        latitude: user.latitude,
+        longitude: user.longitude
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erro no login' });
+  }
 });
 
+// ================= ME =================
 router.get('/me', authMiddleware, (req, res) => {
   res.json({ user: req.user });
 });
