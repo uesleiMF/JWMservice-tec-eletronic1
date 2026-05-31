@@ -5,19 +5,13 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const { Server } = require('socket.io');
 
-const authRoutes = require('./routes/auth');
-const profissionaisRoutes = require('./routes/profissionais');
-const ordersRoutes = require('./routes/orders');
-const messageRoutes = require('./routes/messages');
-const conversationRoutes = require('./routes/conversationRoutes');
-
 const app = express();
 const server = http.createServer(app);
 
-// ==================== SOCKET.IO ====================
+// ==================== SOCKET IO ====================
 const io = new Server(server, {
   cors: {
-    origin: process.env.SOCKET_CORS_ORIGIN || "*",
+    origin: "*",
     methods: ["GET", "POST"]
   }
 });
@@ -32,42 +26,65 @@ mongoose.connect(process.env.MONGO_URI)
   .catch(err => console.error('❌ Mongo error:', err));
 
 // ==================== ROTAS ====================
-app.use('/api/auth', authRoutes);
-app.use('/api/profissionais', profissionaisRoutes);
-app.use('/api/orders', ordersRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/conversations', conversationRoutes);
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/profissionais', require('./routes/profissionais'));
+app.use('/api/orders', require('./routes/orders'));
+app.use('/api/messages', require('./routes/messages'));
+app.use('/conversations', require('./routes/conversationRoutes'));
 
-// ==================== SOCKET STATE ====================
+
+// ==================== ONLINE USERS ====================
 const onlineUsers = new Map();
 
-// ==================== SOCKET CHAT ====================
+// ==================== SOCKET ====================
 io.on('connection', (socket) => {
-  console.log(`🟢 Conectado: ${socket.id}`);
+  console.log('🟢 SOCKET CONECTADO:', socket.id);
+
+  // ================= JOIN USER =================
+  socket.on('join', ({ userId }) => {
+    if (!userId) return;
+
+    socket.join(userId);
+    onlineUsers.set(userId, socket.id);
+
+    console.log('👤 ONLINE:', userId);
+    console.log('📡 ROOMS:', socket.rooms);
+  });
 
   // ================= JOIN ROOM =================
   socket.on('joinRoom', ({ conversationId, userId }) => {
-    if (!conversationId || !userId) {
-      console.log('❌ joinRoom inválido');
-      return;
-    }
+    if (!conversationId || !userId) return;
 
     socket.join(conversationId);
-    onlineUsers.set(userId, socket.id);
 
-    console.log(`👤 ${userId} entrou na conversa ${conversationId}`);
+    console.log(`💬 ROOM ENTRADA: ${conversationId}`);
+    console.log(`👤 USER: ${userId}`);
+    console.log('📡 ROOMS ATUAIS:', socket.rooms);
+  });
+
+  // ================= TYPING =================
+  socket.on('typing', ({ conversationId, userId }) => {
+    socket.to(conversationId).emit('typing', { userId });
+  });
+
+  socket.on('stopTyping', ({ conversationId }) => {
+    socket.to(conversationId).emit('stopTyping');
   });
 
   // ================= SEND MESSAGE =================
   socket.on('sendMessage', async (data) => {
     try {
-      console.log("📥 CHEGOU NO BACKEND:", data);
+      const {
+        conversationId,
+        senderId,
+        receiverId,
+        text,
+        orderId
+      } = data;
 
-      const { conversationId, senderId, receiverId, text, orderId } = data;
-
-      // 🔥 validação segura (SEM quebrar servidor)
+      // 🔥 VALIDAÇÃO FORTE
       if (!conversationId || !senderId || !receiverId || !text?.trim()) {
-        console.log('❌ Dados inválidos:', data);
+        console.log('❌ DADOS INVÁLIDOS');
         return;
       }
 
@@ -77,17 +94,23 @@ io.on('connection', (socket) => {
         conversationId,
         senderId,
         receiverId,
-        orderId: orderId || null, // 🔥 NÃO quebra mais
+        orderId: orderId || null,
         text: text.trim()
       });
 
-      console.log('✅ Mensagem salva:', savedMessage._id);
+      console.log('💾 SALVO:', savedMessage._id);
 
-      // 🔥 envia para todos da sala
+      // 🔥 ENVIA PARA TODOS DA CONVERSA
       io.to(conversationId).emit('receiveMessage', savedMessage);
 
+      // 🔥 GARANTIA EXTRA (ENTREGA DIRETA)
+      io.to(receiverId).emit('receiveMessage', savedMessage);
+
+      // 🔔 NOTIFICAÇÃO
+      io.to(receiverId).emit('newMessageNotification', savedMessage);
+
     } catch (err) {
-      console.error('❌ erro ao salvar mensagem:', err.message);
+      console.error('❌ ERRO AO SALVAR MENSAGEM:', err);
     }
   });
 
@@ -96,15 +119,16 @@ io.on('connection', (socket) => {
     for (const [userId, socketId] of onlineUsers.entries()) {
       if (socketId === socket.id) {
         onlineUsers.delete(userId);
-        console.log(`🔴 ${userId} desconectou`);
+        console.log('🔴 OFFLINE:', userId);
         break;
       }
     }
   });
 });
 
-// ==================== START ====================
+// ==================== START SERVER ====================
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
+
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });
