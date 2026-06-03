@@ -1,150 +1,76 @@
+// controllers/conversationController.js
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 
-// @desc    Criar ou pegar conversa existente
-// @route   POST /api/conversations
-const getOrCreateConversation = async (req, res) => {
-  try {
-    const { receiverId, orderId } = req.body;
-    const senderId = req.user.id;
-
-    if (!receiverId) {
-      return res.status(400).json({ message: 'receiverId é obrigatório' });
-    }
-
-    let conversation = await Conversation.findOne({
-      participants: { $all: [senderId, receiverId] }
-    });
-
-    if (!conversation) {
-      conversation = await Conversation.create({
-        participants: [senderId, receiverId],
-        orderId: orderId || null
-      });
-    }
-
-    res.status(200).json(conversation);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// @desc    Listar todas as conversas do usuário (melhorada para painel)
-// @route   GET /api/conversations
-const getUserConversations = async (req, res) => {
+// Listar todas as conversas do usuário
+const getConversations = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const conversations = await Conversation.find({
-      participants: userId,
-      status: 'active'
-    })
-      .populate('participants', 'name avatar profession role')
-      .populate('lastMessage', 'text createdAt senderId')
-      .populate('orderId', 'title serviceStatus price') // dados do pedido
+    const conversations = await Conversation.find({ participants: userId })
+      .populate({
+        path: 'participants',
+        select: 'name avatar role',
+        match: { _id: { $ne: userId } }
+      })
+      .populate('lastMessage', 'text createdAt')
       .sort({ lastMessageAt: -1 });
 
-    // Formatação amigável para o frontend
-    const formattedConversations = conversations.map(conv => {
-      const otherParticipant = conv.participants.find(
-        p => p._id.toString() !== userId
-      );
-
+    const formatted = conversations.map(conv => {
+      const otherUser = conv.participants.find(p => p && String(p._id) !== String(userId));
       return {
         _id: conv._id,
-        orderId: conv.orderId?._id || null,
-        orderTitle: conv.orderId?.title || null,
-        otherParticipant: {
-          id: otherParticipant?._id,
-          name: otherParticipant?.name,
-          avatar: otherParticipant?.avatar,
-          profession: otherParticipant?.profession,
-          role: otherParticipant?.role
-        },
-        lastMessage: conv.lastMessage ? {
-          text: conv.lastMessage.text,
-          createdAt: conv.lastMessage.createdAt,
-          isFromMe: conv.lastMessage.senderId?.toString() === userId
-        } : null,
+        client: otherUser ? {
+          id: otherUser._id,
+          name: otherUser.name,
+          avatar: otherUser.avatar
+        } : {},
+        lastMessage: conv.lastMessage,
         lastMessageAt: conv.lastMessageAt,
-        unreadCount: conv.unreadCount?.get(userId) || 0,
-        status: conv.status
       };
     });
 
-    res.status(200).json({
-      conversations: formattedConversations,
-      total: formattedConversations.length
-    });
+    res.json({ success: true, conversations: formatted });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error(error);
+    res.status(500).json({ message: 'Erro ao buscar conversas' });
   }
 };
 
-// @desc    Buscar uma conversa específica + mensagens
-// @route   GET /api/conversations/:conversationId
-const getConversationById = async (req, res) => {
+// Buscar histórico de mensagens
+const getMessages = async (req, res) => {
   try {
-    const conversation = await Conversation.findById(req.params.conversationId)
-      .populate('participants', 'name avatar profession role');
+    const { id: conversationId } = req.params;
+    const userId = req.user.id;
 
-    if (!conversation) {
-      return res.status(404).json({ message: 'Conversa não encontrada' });
-    }
-
-    if (!conversation.participants.some(p => p._id.toString() === req.user.id)) {
-      return res.status(403).json({ message: 'Acesso negado' });
-    }
-
-    const messages = await Message.find({ conversationId: req.params.conversationId })
-      .sort({ createdAt: 1 });
-
-    res.status(200).json({ conversation, messages });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// @desc    Enviar mensagem via HTTP
-// @route   POST /api/conversations/:conversationId/messages
-const sendMessage = async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    const { text } = req.body;
-    const senderId = req.user.id;
-
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) {
-      return res.status(404).json({ message: 'Conversa não encontrada' });
-    }
-
-    if (!conversation.participants.some(p => p.toString() === senderId)) {
-      return res.status(403).json({ message: 'Acesso negado' });
-    }
-
-    const receiverId = conversation.participants.find(p => p.toString() !== senderId);
-
-    const message = await Message.create({
-      conversationId,
-      senderId,
-      receiverId,
-      text: text.trim()
+    // Verifica se o usuário participa da conversa
+    const conversation = await Conversation.findOne({
+      _id: conversationId,
+      participants: userId
     });
 
-    // Atualiza última mensagem da conversa
-    conversation.lastMessage = message._id;
-    conversation.lastMessageAt = message.createdAt;
-    await conversation.save();
+    if (!conversation) {
+      return res.status(403).json({ message: 'Acesso negado a esta conversa' });
+    }
 
-    res.status(201).json(message);
+    const messages = await Message.find({ conversationId })
+      .sort({ createdAt: 1 })
+      .populate('senderId', 'name avatar');
+
+    res.json({
+      success: true,
+      messages
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Erro getMessages:', error);
+    res.status(500).json({ message: 'Erro ao carregar mensagens' });
   }
 };
 
 module.exports = {
-  getOrCreateConversation,
-  getUserConversations,
-  getConversationById,
-  sendMessage
+  getConversations,
+  getConversationById: async (req, res) => {
+    res.json({ message: "Rota em desenvolvimento" });
+  },
+  getMessages
 };
