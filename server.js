@@ -1,12 +1,9 @@
 require('dotenv').config();
-
 const express = require('express');
 const http = require('http');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const { Server } = require('socket.io');
-
-const Message = require('./models/Message');
 
 const app = express();
 const server = http.createServer(app);
@@ -27,83 +24,57 @@ app.use(express.json());
 // ==================== MONGODB ====================
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('✅ MongoDB conectado');
-  })
-  .catch((err) => {
-    console.error('❌ Mongo error:', err);
-  });
+  .then(() => console.log('✅ MongoDB conectado'))
+  .catch((err) => console.error('❌ Mongo error:', err));
 
 // ==================== ROTAS ====================
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/profissionais', require('./routes/profissionais'));
 app.use('/api/orders', require('./routes/orders'));
-app.use('/api/messages', require('./routes/messages'));
-app.use('/conversations', require('./routes/conversationRoutes'));
 
-// ==================== ONLINE USERS ====================
-const onlineUsers = new Map();
+// Conversas
+const conversationRoutes = require('./routes/conversationRoutes');
+app.use('/api/conversations', conversationRoutes);
+
+// Avaliações (Reviews) - Novo
+app.use('/api/reviews', require('./routes/reviewRoutes'));
 
 // ==================== SOCKET ====================
+const onlineUsers = new Map();
+
 io.on('connection', (socket) => {
   console.log('🟢 SOCKET CONECTADO:', socket.id);
 
-  // ================= JOIN USER =================
   socket.on('join', ({ userId }) => {
     if (!userId) return;
-
     socket.join(userId);
     onlineUsers.set(userId, socket.id);
-
     console.log('👤 ONLINE:', userId);
   });
 
-  // ================= JOIN ROOM =================
-  socket.on('joinRoom', ({ conversationId, userId }) => {
-    if (!conversationId || !userId) return;
-
+  socket.on('joinRoom', ({ conversationId }) => {
+    if (!conversationId) return;
     socket.join(conversationId);
-
-    console.log(`💬 ROOM: ${conversationId}`);
-    console.log(`👤 USER: ${userId}`);
+    console.log(`💬 Entrou na sala: ${conversationId}`);
   });
 
-  // ================= TYPING =================
   socket.on('typing', ({ conversationId, userId }) => {
-    socket.to(conversationId).emit('typing', {
-      userId
-    });
+    socket.to(conversationId).emit('typing', { userId });
   });
 
   socket.on('stopTyping', ({ conversationId }) => {
     socket.to(conversationId).emit('stopTyping');
   });
 
-  // ================= SEND MESSAGE =================
   socket.on('sendMessage', async (data) => {
     try {
-      const {
-        conversationId,
-        senderId,
-        receiverId,
-        text
-      } = data;
+      const { conversationId, senderId, receiverId, text } = data;
 
-      if (
-        !conversationId ||
-        !senderId ||
-        !receiverId ||
-        !text?.trim()
-      ) {
-        console.log('❌ Dados inválidos');
-
-        socket.emit('messageError', {
-          error: 'Dados inválidos para envio'
-        });
-
-        return;
+      if (!conversationId || !senderId || !receiverId || !text?.trim()) {
+        return socket.emit('messageError', { error: 'Dados inválidos' });
       }
 
+      const Message = require('./models/Message'); // ← corrigido
       const savedMessage = await Message.create({
         conversationId,
         senderId,
@@ -111,72 +82,36 @@ io.on('connection', (socket) => {
         text: text.trim()
       });
 
-      console.log(
-        '💾 MENSAGEM SALVA:',
-        savedMessage._id
-      );
+      // Atualiza última mensagem na Conversation
+      const Conversation = require('./models/Conversation');
+      await Conversation.findByIdAndUpdate(conversationId, {
+        lastMessage: savedMessage._id,
+        lastMessageAt: savedMessage.createdAt
+      });
 
-      // envia para todos que estão na conversa
-      io.to(conversationId).emit(
-        'receiveMessage',
-        savedMessage
-      );
-
-      // garantia extra para destinatário
-      io.to(receiverId).emit(
-        'receiveMessage',
-        savedMessage
-      );
-
-      // notificação
-      io.to(receiverId).emit(
-        'newMessageNotification',
-        {
-          conversationId,
-          senderId,
-          text: text.trim(),
-          createdAt: savedMessage.createdAt
-        }
-      );
+      io.to(conversationId).emit('receiveMessage', savedMessage);
+      io.to(receiverId).emit('newMessageNotification', {
+        conversationId,
+        senderId,
+        text: text.trim(),
+        createdAt: savedMessage.createdAt
+      });
 
     } catch (err) {
-      console.error(
-        '❌ ERRO AO SALVAR MENSAGEM:',
-        err
-      );
-
-      socket.emit('messageError', {
-        error: 'Erro ao enviar mensagem'
-      });
+      console.error('❌ ERRO AO SALVAR MENSAGEM:', err);
+      socket.emit('messageError', { error: 'Erro ao enviar mensagem' });
     }
   });
 
-  // ================= LEAVE ROOM =================
-  socket.on('leaveRoom', ({ conversationId }) => {
-    if (!conversationId) return;
-
-    socket.leave(conversationId);
-
-    console.log(
-      `🚪 Saiu da sala: ${conversationId}`
-    );
-  });
-
-  // ================= DISCONNECT =================
   socket.on('disconnect', () => {
     for (const [userId, socketId] of onlineUsers.entries()) {
       if (socketId === socket.id) {
         onlineUsers.delete(userId);
-
         console.log('🔴 OFFLINE:', userId);
         break;
       }
     }
-
-    console.log(
-      '🔌 SOCKET DESCONECTADO:',
-      socket.id
-    );
+    console.log('🔌 SOCKET DESCONECTADO:', socket.id);
   });
 });
 
@@ -190,9 +125,6 @@ app.get('/', (req, res) => {
 
 // ==================== START SERVER ====================
 const PORT = process.env.PORT || 5000;
-
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(
-    `🚀 Servidor rodando na porta ${PORT}`
-  );
+  console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });

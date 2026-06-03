@@ -2,27 +2,16 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const authMiddleware = require('../middleware/authMiddleware');
+const { protect } = require('../middleware/authMiddleware');   // ← alterado aqui
 
 // ================= REGISTER =================
 router.post('/register', async (req, res) => {
   try {
-    const { 
-      name, 
-      email, 
-      password, 
-      role, 
-      phone, 
-      servico, 
-      latitude, 
-      longitude 
-    } = req.body;
+    const { name, email, password, role, phone, servico, latitude, longitude } = req.body;
 
-    // Validações
     if (!name || !email || !password || !role) {
       return res.status(400).json({ message: 'Nome, email, senha e role são obrigatórios' });
     }
-
     if (!['cliente', 'profissional'].includes(role)) {
       return res.status(400).json({ message: 'Role inválido' });
     }
@@ -74,7 +63,6 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
     if (!email || !password) {
       return res.status(400).json({ message: 'Email e senha são obrigatórios' });
     }
@@ -115,7 +103,7 @@ router.post('/login', async (req, res) => {
 });
 
 // ================= ME =================
-router.get('/me', authMiddleware, (req, res) => {
+router.get('/me', protect, (req, res) => {   // ← alterado aqui
   res.json({ user: req.user });
 });
 

@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const authMiddleware = async (req, res, next) => {
+const protect = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -24,12 +24,12 @@ const authMiddleware = async (req, res, next) => {
 
     // Adiciona o usuário na requisição
     req.user = user;
-    req.userId = user._id.toString();   // ← Adicione esta linha (muito útil)
+    req.user.id = user._id.toString();   // importante para o controller
 
     next();
   } catch (err) {
     console.error('Erro no authMiddleware:', err.message);
-    
+
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({ message: 'Token expirado. Faça login novamente.' });
     }
@@ -41,4 +41,4 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
-module.exports = authMiddleware;
+module.exports = { protect };
