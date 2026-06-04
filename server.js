@@ -38,7 +38,6 @@ app.use('/api/conversations', conversationRoutes);
 
 // Avaliações (Reviews) - Novo
 app.use('/api/reviews', require('./routes/reviewRoutes'));
-
 // ==================== SOCKET ====================
 const onlineUsers = new Map();
 
@@ -66,6 +65,7 @@ io.on('connection', (socket) => {
     socket.to(conversationId).emit('stopTyping');
   });
 
+  // ==================== ENVIAR MENSAGEM ====================
   socket.on('sendMessage', async (data) => {
     try {
       const { conversationId, senderId, receiverId, text } = data;
@@ -74,7 +74,7 @@ io.on('connection', (socket) => {
         return socket.emit('messageError', { error: 'Dados inválidos' });
       }
 
-      const Message = require('./models/Message'); // ← corrigido
+      const Message = require('./models/Message');
       const savedMessage = await Message.create({
         conversationId,
         senderId,
@@ -89,7 +89,12 @@ io.on('connection', (socket) => {
         lastMessageAt: savedMessage.createdAt
       });
 
+      console.log('✅ Mensagem salva e enviada:', savedMessage._id);
+
+      // Emite para TODOS na sala (incluindo quem enviou)
       io.to(conversationId).emit('receiveMessage', savedMessage);
+
+      // Notificação para o outro usuário
       io.to(receiverId).emit('newMessageNotification', {
         conversationId,
         senderId,
@@ -114,7 +119,6 @@ io.on('connection', (socket) => {
     console.log('🔌 SOCKET DESCONECTADO:', socket.id);
   });
 });
-
 // ==================== HEALTH CHECK ====================
 app.get('/', (req, res) => {
   res.json({
