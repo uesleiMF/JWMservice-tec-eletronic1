@@ -1,41 +1,68 @@
 const express = require('express');
 const router = express.Router();
+
 const Message = require('../models/Message');
+const Conversation = require('../models/Conversation');
 
 // ======================
 // CRIAR MENSAGEM
 // ======================
 router.post('/', async (req, res) => {
   try {
+
     const {
       senderId,
       receiverId,
-      conversationId,
       text
     } = req.body;
 
     if (
       !senderId ||
       !receiverId ||
-      !conversationId ||
-      !text?.trim()
+      !text ||
+      !text.trim()
     ) {
       return res.status(400).json({
-        error:
-          'Campos obrigatórios: senderId, receiverId, conversationId e text'
+        error: 'senderId, receiverId e text são obrigatórios'
       });
     }
 
+    // Procura conversa existente
+    let conversation = await Conversation.findOne({
+      participants: {
+        $all: [senderId, receiverId]
+      }
+    });
+
+    // Cria conversa caso não exista
+    if (!conversation) {
+      conversation = await Conversation.create({
+        participants: [senderId, receiverId]
+      });
+    }
+
+    // Cria mensagem
     const message = await Message.create({
+      conversationId: conversation._id,
       senderId,
       receiverId,
-      conversationId,
       text: text.trim()
     });
 
-    res.status(201).json(message);
+    // Atualiza dados da conversa
+    conversation.lastMessage = message._id;
+    conversation.lastMessageAt = new Date();
+
+    await conversation.save();
+
+    res.status(201).json({
+      success: true,
+      conversationId: conversation._id,
+      message
+    });
 
   } catch (err) {
+
     console.error('Erro ao salvar mensagem:', err);
 
     res.status(500).json({
@@ -55,14 +82,16 @@ router.get('/:conversationId', async (req, res) => {
     const messages = await Message.find({
       conversationId
     })
-      .sort({ createdAt: 1 })
-      .lean();
+      .populate('senderId', 'name role')
+      .sort({ createdAt: 1 });
 
     res.json({
+      success: true,
       messages
     });
 
   } catch (err) {
+
     console.error('Erro ao buscar mensagens:', err);
 
     res.status(500).json({
@@ -92,6 +121,7 @@ router.delete('/:messageId', async (req, res) => {
     });
 
   } catch (err) {
+
     console.error(err);
 
     res.status(500).json({

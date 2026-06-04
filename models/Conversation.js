@@ -1,3 +1,5 @@
+// models/Conversation.js
+
 const mongoose = require('mongoose');
 
 const ConversationSchema = new mongoose.Schema({
@@ -30,7 +32,6 @@ const ConversationSchema = new mongoose.Schema({
     default: 'active'
   },
 
-  // Contador de mensagens não lidas por usuário
   unreadCount: {
     type: Map,
     of: Number,
@@ -40,10 +41,12 @@ const ConversationSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Índices importantes para performance
 ConversationSchema.index({ participants: 1 });
 ConversationSchema.index({ orderId: 1 });
 ConversationSchema.index({ lastMessageAt: -1 });
 ConversationSchema.index({ status: 1 });
 
-module.exports = mongoose.model('Conversation', ConversationSchema);
+module.exports = mongoose.model(
+  'Conversation',
+  ConversationSchema
+);module.exports = mongoose.model('Conversation', ConversationSchema);

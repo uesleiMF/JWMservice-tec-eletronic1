@@ -66,48 +66,89 @@ io.on('connection', (socket) => {
   });
 
   // ==================== ENVIAR MENSAGEM ====================
-  socket.on('sendMessage', async (data) => {
-    try {
-      const { conversationId, senderId, receiverId, text } = data;
+ socket.on('sendMessage', async (data) => {
+  try {
+    let { conversationId, senderId, receiverId, text } = data;
 
-      if (!conversationId || !senderId || !receiverId || !text?.trim()) {
-        return socket.emit('messageError', { error: 'Dados inválidos' });
-      }
-
-      const Message = require('./models/Message');
-      const savedMessage = await Message.create({
-        conversationId,
-        senderId,
-        receiverId,
-        text: text.trim()
+    if (!senderId || !receiverId || !text?.trim()) {
+      return socket.emit('messageError', {
+        error: 'Dados inválidos'
       });
-
-      // Atualiza última mensagem na Conversation
-      const Conversation = require('./models/Conversation');
-      await Conversation.findByIdAndUpdate(conversationId, {
-        lastMessage: savedMessage._id,
-        lastMessageAt: savedMessage.createdAt
-      });
-
-      console.log('✅ Mensagem salva e enviada:', savedMessage._id);
-
-      // Emite para TODOS na sala (incluindo quem enviou)
-      io.to(conversationId).emit('receiveMessage', savedMessage);
-
-      // Notificação para o outro usuário
-      io.to(receiverId).emit('newMessageNotification', {
-        conversationId,
-        senderId,
-        text: text.trim(),
-        createdAt: savedMessage.createdAt
-      });
-
-    } catch (err) {
-      console.error('❌ ERRO AO SALVAR MENSAGEM:', err);
-      socket.emit('messageError', { error: 'Erro ao enviar mensagem' });
     }
-  });
 
+    const Conversation = require('./models/Conversation');
+    const Message = require('./models/Message');
+
+    // Procura conversa existente
+    let conversation = null;
+
+    if (conversationId) {
+      conversation = await Conversation.findById(conversationId);
+    }
+
+    // Se não existir, cria automaticamente
+    if (!conversation) {
+      conversation = await Conversation.create({
+        participants: [senderId, receiverId],
+        lastMessageAt: new Date()
+      });
+
+      conversationId = conversation._id;
+
+      console.log(
+        '💬 Nova conversa criada:',
+        conversationId
+      );
+    }
+
+    // Salva mensagem
+    const savedMessage = await Message.create({
+      conversationId,
+      senderId,
+      receiverId,
+      text: text.trim()
+    });
+
+    // Atualiza conversa
+    conversation.lastMessage = savedMessage._id;
+    conversation.lastMessageAt = savedMessage.createdAt;
+
+    await conversation.save();
+
+    console.log(
+      '✅ Mensagem salva:',
+      savedMessage._id
+    );
+
+    // Garante que os usuários estejam na sala
+    socket.join(conversationId.toString());
+
+    io.to(conversationId.toString()).emit(
+      'receiveMessage',
+      savedMessage
+    );
+
+    io.to(receiverId).emit(
+      'newMessageNotification',
+      {
+        conversationId,
+        senderId,
+        text: savedMessage.text,
+        createdAt: savedMessage.createdAt
+      }
+    );
+
+  } catch (err) {
+    console.error(
+      '❌ ERRO AO SALVAR MENSAGEM:',
+      err
+    );
+
+    socket.emit('messageError', {
+      error: 'Erro ao enviar mensagem'
+    });
+  }
+});
   socket.on('disconnect', () => {
     for (const [userId, socketId] of onlineUsers.entries()) {
       if (socketId === socket.id) {
