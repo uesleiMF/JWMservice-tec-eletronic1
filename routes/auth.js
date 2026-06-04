@@ -2,42 +2,88 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const { protect } = require('../middleware/authMiddleware');   // ← alterado aqui
+const { protect } = require('../middleware/authMiddleware');
 
 // ================= REGISTER =================
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role, phone, servico, latitude, longitude } = req.body;
+    const {
+      name,
+      email,
+      password,
+      role,
+      phone,
+      servico,
+      latitude,
+      longitude
+    } = req.body;
 
     if (!name || !email || !password || !role) {
-      return res.status(400).json({ message: 'Nome, email, senha e role são obrigatórios' });
+      return res.status(400).json({
+        message: 'Nome, email, senha e role são obrigatórios'
+      });
     }
+
     if (!['cliente', 'profissional'].includes(role)) {
-      return res.status(400).json({ message: 'Role inválido' });
+      return res.status(400).json({
+        message: 'Role inválido'
+      });
     }
 
     const exists = await User.findOne({ email });
+
     if (exists) {
-      return res.status(400).json({ message: 'Email já cadastrado' });
+      return res.status(400).json({
+        message: 'Email já cadastrado'
+      });
     }
 
-    const user = new User({
+    const userData = {
       name,
       email,
       role,
       phone: phone || null,
       servico: role === 'profissional' ? servico : null,
-      latitude: latitude ? parseFloat(latitude) : null,
-      longitude: longitude ? parseFloat(longitude) : null,
-    });
+      latitude:
+        latitude !== undefined && latitude !== null
+          ? Number(latitude)
+          : null,
+      longitude:
+        longitude !== undefined && longitude !== null
+          ? Number(longitude)
+          : null
+    };
+
+    // Geolocalização para busca por proximidade
+    if (
+      latitude !== undefined &&
+      latitude !== null &&
+      longitude !== undefined &&
+      longitude !== null
+    ) {
+      userData.location = {
+        type: 'Point',
+        coordinates: [
+          Number(longitude),
+          Number(latitude)
+        ]
+      };
+    }
+
+    const user = new User(userData);
 
     await user.setPassword(password);
     await user.save();
 
     const token = jwt.sign(
-      { id: user._id, role: user.role },
+      {
+        id: user._id,
+        role: user.role
+      },
       process.env.JWT_SECRET,
-      { expiresIn: '1d' }
+      {
+        expiresIn: '1d'
+      }
     );
 
     res.status(201).json({
@@ -53,9 +99,13 @@ router.post('/register', async (req, res) => {
         longitude: user.longitude
       }
     });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Erro no registro' });
+    console.error('ERRO REGISTER:', err);
+
+    res.status(500).json({
+      message: 'Erro no registro'
+    });
   }
 });
 
@@ -63,24 +113,38 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email e senha são obrigatórios' });
+      return res.status(400).json({
+        message: 'Email e senha são obrigatórios'
+      });
     }
 
     const user = await User.findOne({ email });
+
     if (!user) {
-      return res.status(400).json({ message: 'Usuário não encontrado' });
+      return res.status(400).json({
+        message: 'Usuário não encontrado'
+      });
     }
 
     const valid = await user.validatePassword(password);
+
     if (!valid) {
-      return res.status(400).json({ message: 'Senha incorreta' });
+      return res.status(400).json({
+        message: 'Senha incorreta'
+      });
     }
 
     const token = jwt.sign(
-      { id: user._id, role: user.role },
+      {
+        id: user._id,
+        role: user.role
+      },
       process.env.JWT_SECRET,
-      { expiresIn: '1d' }
+      {
+        expiresIn: '1d'
+      }
     );
 
     res.json({
@@ -96,15 +160,21 @@ router.post('/login', async (req, res) => {
         longitude: user.longitude
       }
     });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Erro no login' });
+    console.error('ERRO LOGIN:', err);
+
+    res.status(500).json({
+      message: 'Erro no login'
+    });
   }
 });
 
 // ================= ME =================
-router.get('/me', protect, (req, res) => {   // ← alterado aqui
-  res.json({ user: req.user });
+router.get('/me', protect, async (req, res) => {
+  res.json({
+    user: req.user
+  });
 });
 
 module.exports = router;
