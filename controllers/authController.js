@@ -12,17 +12,8 @@ const generateToken = (id) => {
 exports.register = async (req, res) => {
   const { name, email, password, phone, role, servico, latitude, longitude } = req.body;
 
-  // Validação
-  if (!name || !email || !password || !role || !phone) {
-    return res.status(400).json({ 
-      message: 'Nome, email, senha, telefone e role são obrigatórios' 
-    });
-  }
-
-  if (role === 'profissional' && !servico) {
-    return res.status(400).json({ 
-      message: 'Profissionais devem informar o serviço oferecido' 
-    });
+  if (!name || !email || !password || !phone || !role) {
+    return res.status(400).json({ message: 'Todos os campos obrigatórios devem ser preenchidos' });
   }
 
   try {
@@ -37,12 +28,17 @@ exports.register = async (req, res) => {
     const user = await User.create({
       name,
       email: email.toLowerCase(),
-      password: hashedPassword,
+      passwordHash: hashedPassword,        // ← Aqui estava o erro principal
       phone,
       role,
       servico: role === 'profissional' ? servico : undefined,
       latitude: latitude || undefined,
       longitude: longitude || undefined,
+      // Opcional: preencher location também
+      location: latitude && longitude ? {
+        type: 'Point',
+        coordinates: [longitude, latitude]   // [lng, lat]
+      } : undefined
     });
 
     const token = generateToken(user._id);
@@ -56,13 +52,13 @@ exports.register = async (req, res) => {
         phone: user.phone,
         role: user.role,
         servico: user.servico,
-      },
+      }
     });
   } catch (err) {
-    console.error('Erro no registro:', err); // ← Isso vai aparecer no log do Render
+    console.error('❌ ERRO NO REGISTRO:', err);
     res.status(500).json({ 
       message: 'Erro no registro', 
-      error: err.message // ← Temporário para debug
+      error: err.message 
     });
   }
 };
@@ -81,7 +77,7 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: 'Usuário não encontrado' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(400).json({ message: 'Senha inválida' });
     }
@@ -97,7 +93,7 @@ exports.login = async (req, res) => {
         phone: user.phone,
         role: user.role,
         servico: user.servico,
-      },
+      }
     });
   } catch (err) {
     console.error('Erro no login:', err);
