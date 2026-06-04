@@ -46,7 +46,4 @@ ConversationSchema.index({ orderId: 1 });
 ConversationSchema.index({ lastMessageAt: -1 });
 ConversationSchema.index({ status: 1 });
 
-module.exports = mongoose.model(
-  'Conversation',
-  ConversationSchema
-);module.exports = mongoose.model('Conversation', ConversationSchema);
+module.exports = mongoose.model('Conversation', ConversationSchema);
