@@ -1,7 +1,7 @@
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 
-// Listar todas as conversas do usuário
+// ====================== LISTAR CONVERSAS DO USUÁRIO ======================
 exports.getConversations = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
@@ -9,7 +9,7 @@ exports.getConversations = async (req, res) => {
     const conversations = await Conversation.find({
       participants: userId
     })
-    .populate('participants', 'name email phone')
+    .populate('participants', 'name email phone role')
     .sort({ lastMessageAt: -1 });
 
     res.json({ conversations });
@@ -19,22 +19,25 @@ exports.getConversations = async (req, res) => {
   }
 };
 
-// Buscar uma conversa específica
+// ====================== BUSCAR UMA CONVERSA ESPECÍFICA ======================
 exports.getConversationById = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id || req.user._id;
 
     const conversation = await Conversation.findById(id)
-      .populate('participants', 'name email phone');
+      .populate('participants', 'name email phone role');
 
     if (!conversation) {
       return res.status(404).json({ message: 'Conversa não encontrada' });
     }
 
-    // Verifica se o usuário participa da conversa
-    if (!conversation.participants.some(p => String(p._id) === String(userId))) {
-      return res.status(403).json({ message: 'Acesso negado' });
+    const isParticipant = conversation.participants.some(
+      p => String(p._id) === String(userId)
+    );
+
+    if (!isParticipant) {
+      return res.status(403).json({ message: 'Acesso negado a esta conversa' });
     }
 
     res.json({ conversation });
@@ -44,7 +47,7 @@ exports.getConversationById = async (req, res) => {
   }
 };
 
-// Buscar mensagens de uma conversa (ROTA PROBLEMÁTICA)
+// ====================== BUSCAR MENSAGENS (ATUALIZADO) ======================
 exports.getMessages = async (req, res) => {
   try {
     const { id } = req.params;           // conversationId
@@ -56,22 +59,36 @@ exports.getMessages = async (req, res) => {
 
     if (!conversation) {
       console.log('❌ Conversa não encontrada no banco');
-      return res.status(404).json({ message: 'Conversa não encontrada' });
+      return res.status(404).json({ 
+        message: 'Conversa não encontrada',
+        conversationId: id 
+      });
     }
 
-    // Verificação de permissão
+    // Verifica se o usuário participa da conversa
     const isParticipant = conversation.participants.some(
       p => String(p) === String(userId)
     );
 
     if (!isParticipant) {
+      console.log('❌ Usuário não é participante');
       return res.status(403).json({ message: 'Acesso negado a esta conversa' });
     }
 
+    // Busca as mensagens
     const messages = await Message.find({ conversationId: id })
       .sort({ createdAt: 1 });
 
-    res.json({ messages });
+    console.log(`✅ ${messages.length} mensagens encontradas`);
+
+    res.json({ 
+      messages,
+      conversation: {
+        _id: conversation._id,
+        participants: conversation.participants
+      }
+    });
+
   } catch (err) {
     console.error('❌ Erro ao buscar mensagens:', err);
     res.status(500).json({ message: 'Erro ao carregar histórico' });
