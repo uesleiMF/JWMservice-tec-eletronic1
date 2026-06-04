@@ -4,6 +4,8 @@ const http = require('http');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const { Server } = require('socket.io');
+const chatRoutes = require('./routes/chatRoutes');
+
 
 const app = express();
 const server = http.createServer(app);
@@ -31,6 +33,8 @@ mongoose
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/profissionais', require('./routes/profissionais'));
 app.use('/api/orders', require('./routes/orders'));
+
+app.use('/api/chat', chatRoutes);
 
 // Conversas
 const conversationRoutes = require('./routes/conversationRoutes');
