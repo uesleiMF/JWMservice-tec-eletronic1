@@ -2,25 +2,33 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-// Função para gerar token JWT
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   });
 };
 
-// Registrar novo usuário
+// ====================== REGISTER ======================
 exports.register = async (req, res) => {
-  const { name, email, password, phone, role } = req.body;
+  const { name, email, password, phone, role, servico, latitude, longitude } = req.body;
 
-  if (!name || !email || !password || !role) {
-    return res.status(400).json({ error: 'Campos obrigatórios faltando' });
+  // Validação
+  if (!name || !email || !password || !role || !phone) {
+    return res.status(400).json({ 
+      message: 'Nome, email, senha, telefone e role são obrigatórios' 
+    });
+  }
+
+  if (role === 'profissional' && !servico) {
+    return res.status(400).json({ 
+      message: 'Profissionais devem informar o serviço oferecido' 
+    });
   }
 
   try {
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ email: email.toLowerCase() });
     if (userExists) {
-      return res.status(400).json({ error: 'Email já cadastrado' });
+      return res.status(400).json({ message: 'Email já cadastrado' });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -28,10 +36,13 @@ exports.register = async (req, res) => {
 
     const user = await User.create({
       name,
-      email,
+      email: email.toLowerCase(),
       password: hashedPassword,
       phone,
       role,
+      servico: role === 'profissional' ? servico : undefined,
+      latitude: latitude || undefined,
+      longitude: longitude || undefined,
     });
 
     const token = generateToken(user._id);
@@ -44,28 +55,36 @@ exports.register = async (req, res) => {
         email: user.email,
         phone: user.phone,
         role: user.role,
+        servico: user.servico,
       },
     });
   } catch (err) {
-    console.error('Erro no registro:', err);
-    res.status(500).json({ error: 'Erro no servidor' });
+    console.error('Erro no registro:', err); // ← Isso vai aparecer no log do Render
+    res.status(500).json({ 
+      message: 'Erro no registro', 
+      error: err.message // ← Temporário para debug
+    });
   }
 };
 
-// Login de usuário
+// ====================== LOGIN ======================
 exports.login = async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ error: 'Email e senha são obrigatórios' });
+    return res.status(400).json({ message: 'Email e senha são obrigatórios' });
   }
 
   try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ error: 'Usuário não encontrado' });
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(400).json({ message: 'Usuário não encontrado' });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ error: 'Senha inválida' });
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Senha inválida' });
+    }
 
     const token = generateToken(user._id);
 
@@ -77,10 +96,11 @@ exports.login = async (req, res) => {
         email: user.email,
         phone: user.phone,
         role: user.role,
+        servico: user.servico,
       },
     });
   } catch (err) {
     console.error('Erro no login:', err);
-    res.status(500).json({ error: 'Erro no servidor' });
+    res.status(500).json({ message: 'Erro no servidor' });
   }
 };
