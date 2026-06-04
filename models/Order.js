@@ -1,11 +1,35 @@
 const mongoose = require('mongoose');
 
 const OrderSchema = new mongoose.Schema({
-  cliente: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  profissional: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  cliente: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
 
-  servico: { type: String, required: true, trim: true },
-  descricao: { type: String, trim: true },
+  profissional: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+
+  // NOVO CAMPO
+  conversationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Conversation',
+    default: null
+  },
+
+  servico: {
+    type: String,
+    required: true,
+    trim: true
+  },
+
+  descricao: {
+    type: String,
+    trim: true
+  },
 
   status: {
     type: String,
@@ -20,7 +44,10 @@ const OrderSchema = new mongoose.Schema({
     default: 'pendente'
   },
 
-  valor: { type: Number, min: 0 },
+  valor: {
+    type: Number,
+    min: 0
+  },
 
   dataFinalizacao: Date
 }, {
