@@ -48,49 +48,44 @@ exports.getConversationById = async (req, res) => {
 };
 
 // ====================== BUSCAR MENSAGENS (ATUALIZADO) ======================
+// ====================== BUSCAR MENSAGENS ======================
 exports.getMessages = async (req, res) => {
   try {
-    const { id } = req.params;           // conversationId
-    const userId = req.user.id || req.user._id;
+    const { id: conversationId } = req.params;
+    const userId = req.user?.id || req.user?._id;
 
-    console.log(`🔍 Buscando mensagens da conversa: ${id} | Usuário: ${userId}`);
+    console.log(`🔍 [BACKEND] Buscando mensagens - Conv: ${conversationId} | User: ${userId}`);
 
-    const conversation = await Conversation.findById(id);
-
-    if (!conversation) {
-      console.log('❌ Conversa não encontrada no banco');
-      return res.status(404).json({ 
-        message: 'Conversa não encontrada',
-        conversationId: id 
-      });
+    if (!conversationId) {
+      return res.status(400).json({ message: 'ID da conversa é obrigatório' });
     }
 
-    // Verifica se o usuário participa da conversa
-    const isParticipant = conversation.participants.some(
-      p => String(p) === String(userId)
-    );
+    const conversation = await Conversation.findById(conversationId);
+
+    if (!conversation) {
+      console.log('❌ Conversa não encontrada');
+      return res.status(404).json({ message: 'Conversa não encontrada' });
+    }
+
+    // Verificação mais flexível
+    const isParticipant = 
+      conversation.participants?.some(p => String(p) === String(userId)) ||
+      String(conversation.client?._id || conversation.client) === String(userId) ||
+      String(conversation.profissional?._id || conversation.profissional) === String(userId);
 
     if (!isParticipant) {
       console.log('❌ Usuário não é participante');
-      return res.status(403).json({ message: 'Acesso negado a esta conversa' });
+      return res.status(403).json({ message: 'Acesso negado' });
     }
 
-    // Busca as mensagens
-    const messages = await Message.find({ conversationId: id })
+    const messages = await Message.find({ conversationId })
       .sort({ createdAt: 1 });
 
     console.log(`✅ ${messages.length} mensagens encontradas`);
-
-    res.json({ 
-      messages,
-      conversation: {
-        _id: conversation._id,
-        participants: conversation.participants
-      }
-    });
+    res.json({ messages });
 
   } catch (err) {
     console.error('❌ Erro ao buscar mensagens:', err);
-    res.status(500).json({ message: 'Erro ao carregar histórico' });
+    res.status(500).json({ message: 'Erro interno ao carregar mensagens' });
   }
 };
