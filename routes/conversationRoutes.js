@@ -1,4 +1,3 @@
-// routes/conversationRoutes.js
 const express = require('express');
 const router = express.Router();
 const {
@@ -9,17 +8,28 @@ const {
 
 const { protect } = require('../middleware/authMiddleware');
 
-// ==================== ROTAS MAIS ESPECÍFICAS PRIMEIRO ====================
+// ====================== ROTA DE DEBUG (coloque aqui) ======================
+router.get('/:id/debug', protect, async (req, res) => {
+  try {
+    const conv = await Conversation.findById(req.params.id);
+    res.json({
+      found: !!conv,
+      id: req.params.id,
+      conversation: conv
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
-// Buscar mensagens de uma conversa
+// ==================== ROTAS PRINCIPAIS (mais específicas primeiro) ====================
+
+// Buscar mensagens
 router.get('/:id/messages', protect, getMessages);
 
-// Rota de teste
+// Rota de teste (opcional)
 router.get('/:id/test-messages', (req, res) => {
-  res.json({ 
-    message: 'Rota de teste funcionando!', 
-    conversationId: req.params.id 
-  });
+  res.json({ message: 'Rota de teste funcionando!', conversationId: req.params.id });
 });
 
 // Buscar uma conversa específica
