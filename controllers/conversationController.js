@@ -47,7 +47,6 @@ exports.getConversationById = async (req, res) => {
   }
 };
 
-// ====================== BUSCAR MENSAGENS (ATUALIZADO) ======================
 // ====================== BUSCAR MENSAGENS ======================
 exports.getMessages = async (req, res) => {
   try {
@@ -60,11 +59,8 @@ exports.getMessages = async (req, res) => {
       return res.status(400).json({ message: 'ID da conversa é obrigatório' });
     }
 
-    // Busca mais completa
-    const conversation = await Conversation.findById(conversationId)
-      .populate('participants', 'name role')
-      .populate('client')
-      .populate('profissional');
+    // Busca a conversa SEM os populates problemáticos
+    const conversation = await Conversation.findById(conversationId);
 
     if (!conversation) {
       console.log('❌ Conversa não encontrada no banco');
@@ -77,13 +73,13 @@ exports.getMessages = async (req, res) => {
     console.log('✅ Conversa encontrada:', {
       id: conversation._id,
       participants: conversation.participants?.length || 0,
-      hasClient: !!conversation.client,
-      hasProfissional: !!conversation.profissional
+      client: conversation.client,
+      profissional: conversation.profissional
     });
 
-    // Verificação de acesso (melhorada)
+    // Verificação de acesso (flexível)
     const isParticipant = 
-      conversation.participants?.some(p => String(p._id || p) === String(userId)) ||
+      conversation.participants?.some(p => String(p?._id || p) === String(userId)) ||
       String(conversation.client?._id || conversation.client) === String(userId) ||
       String(conversation.profissional?._id || conversation.profissional) === String(userId);
 
@@ -92,11 +88,12 @@ exports.getMessages = async (req, res) => {
       return res.status(403).json({ message: 'Acesso negado a esta conversa' });
     }
 
-    const messages = await Message.find({ conversation: conversationId })  // ← Atenção aqui!
+    // Busca as mensagens - MUITO IMPORTANTE: verifique o nome do campo!
+    const messages = await Message.find({ conversation: conversationId })  // ← Teste primeiro com "conversation"
       .sort({ createdAt: 1 });
 
     console.log(`✅ ${messages.length} mensagens encontradas`);
-    res.json({ messages, conversation });
+    res.json({ messages });
 
   } catch (err) {
     console.error('❌ Erro ao buscar mensagens:', err);
