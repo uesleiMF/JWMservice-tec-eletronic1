@@ -1,19 +1,19 @@
 const express = require('express');
 const router = express.Router();
+
 const {
   getConversations,
   getConversationById,
-  getMessages
+  getMessages,
+  createConversation   // ← Adicionado
 } = require('../controllers/conversationController');
 
 const { protect } = require('../middleware/authMiddleware');
 
-// ====================== ROTA DE DEBUG (SEM PROTECT) ======================
-
+// ====================== ROTA DE DEBUG (remova depois) ======================
 router.get('/:id/debug', async (req, res) => {
   try {
-    const Conversation = require('../models/Conversation'); // ← Importação aqui
-    
+    const Conversation = require('../models/Conversation');
     const conv = await Conversation.findById(req.params.id);
     
     res.json({
@@ -26,25 +26,31 @@ router.get('/:id/debug', async (req, res) => {
     console.error(e);
     res.status(500).json({ 
       error: e.message,
-      message: "Erro ao buscar conversa"
+      message: "Erro ao buscar conversa" 
     });
   }
 });
 
-// ==================== ROTAS PRINCIPAIS (mais específicas primeiro) ====================
+// ==================== ROTAS PRINCIPAIS ====================
 
-// Buscar mensagens
+// Buscar mensagens de uma conversa
 router.get('/:id/messages', protect, getMessages);
 
-// Rota de teste (opcional)
-router.get('/:id/test-messages', (req, res) => {
-  res.json({ message: 'Rota de teste funcionando!', conversationId: req.params.id });
-});
+// Criar nova conversa
+router.post('/', protect, createConversation);
 
 // Buscar uma conversa específica
 router.get('/:id', protect, getConversationById);
 
-// Buscar todas as conversas
+// Buscar todas as conversas do usuário
 router.get('/', protect, getConversations);
+
+// Rota de teste (opcional - pode remover depois)
+router.get('/:id/test-messages', (req, res) => {
+  res.json({ 
+    message: 'Rota de teste funcionando!', 
+    conversationId: req.params.id 
+  });
+});
 
 module.exports = router;

@@ -9,8 +9,8 @@ exports.getConversations = async (req, res) => {
     const conversations = await Conversation.find({
       participants: userId
     })
-    .populate('participants', 'name email phone role')
-    .sort({ lastMessageAt: -1 });
+      .populate('participants', 'name email phone role')
+      .sort({ lastMessageAt: -1 });
 
     res.json({ conversations });
   } catch (err) {
@@ -47,7 +47,8 @@ exports.getConversationById = async (req, res) => {
   }
 };
 
-// ====================== BUSCAR MENSAGENS ======================
+// ====================== BUSCAR MENSAGENS =====================
+
 exports.getMessages = async (req, res) => {
   try {
     const { id: conversationId } = req.params;
@@ -55,35 +56,29 @@ exports.getMessages = async (req, res) => {
 
     console.log(`🔍 [BACKEND] Buscando mensagens - Conv: ${conversationId} | User: ${userId}`);
 
-    if (!conversationId) {
-      return res.status(400).json({ message: 'ID da conversa é obrigatório' });
-    }
-
     const conversation = await Conversation.findById(conversationId);
 
     if (!conversation) {
-      console.log('❌ Conversa não encontrada no banco');
+      console.log('❌ Conversa não encontrada');
       return res.status(404).json({ message: 'Conversa não encontrada' });
     }
 
     console.log('✅ Conversa encontrada:', {
       id: conversation._id,
-      participants: conversation.participants?.length || 0,
+      participants: conversation.participants?.length || 0
     });
 
-    // Verificação de acesso
-    const isParticipant = 
-      conversation.participants?.some(p => String(p?._id || p) === String(userId)) ||
-      String(conversation.client?._id || conversation.client) === String(userId) ||
-      String(conversation.profissional?._id || conversation.profissional) === String(userId);
+    // Verificação mais simples e confiável
+    const isParticipant = conversation.participants.some(
+      p => String(p) === String(userId)
+    );
 
     if (!isParticipant) {
       console.log('❌ Usuário não é participante');
       return res.status(403).json({ message: 'Acesso negado' });
     }
 
-    // Busca as mensagens (campo correto!)
-    const messages = await Message.find({ conversationId: conversationId })
+    const messages = await Message.find({ conversationId })
       .sort({ createdAt: 1 });
 
     console.log(`✅ ${messages.length} mensagens encontradas`);
@@ -92,5 +87,47 @@ exports.getMessages = async (req, res) => {
   } catch (err) {
     console.error('❌ Erro ao buscar mensagens:', err);
     res.status(500).json({ message: 'Erro interno ao carregar mensagens' });
+  }
+};
+
+// ====================== CRIAR CONVERSA (adicionei para ajudar) ======================
+exports.createConversation = async (req, res) => {
+  try {
+    const { clientId, profissionalId, orderId } = req.body;
+
+    if (!clientId || !profissionalId) {
+      return res.status(400).json({ message: 'clientId e profissionalId são obrigatórios' });
+    }
+
+    // Verifica se já existe conversa entre eles
+    let conversation = await Conversation.findOne({
+      participants: { $all: [clientId, profissionalId] }
+    });
+
+    if (conversation) {
+      console.log('✅ Conversa já existia:', conversation._id);
+      return res.json({ conversation });
+    }
+
+    // Cria nova conversa
+    conversation = new Conversation({
+      participants: [clientId, profissionalId],
+      client: clientId,
+      profissional: profissionalId,
+      orderId: orderId || null,
+      lastMessageAt: new Date()
+    });
+
+    await conversation.save();
+
+    console.log('✅ Nova conversa criada:', conversation._id);
+    res.status(201).json({ 
+      message: 'Conversa criada com sucesso',
+      conversation 
+    });
+
+  } catch (err) {
+    console.error('❌ Erro ao criar conversa:', err);
+    res.status(500).json({ message: 'Erro ao criar conversa' });
   }
 };

@@ -1,5 +1,3 @@
-// models/Conversation.js
-
 const mongoose = require('mongoose');
 
 const ConversationSchema = new mongoose.Schema({
@@ -41,6 +39,7 @@ const ConversationSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Índices para performance
 ConversationSchema.index({ participants: 1 });
 ConversationSchema.index({ orderId: 1 });
 ConversationSchema.index({ lastMessageAt: -1 });
