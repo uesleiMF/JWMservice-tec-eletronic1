@@ -19,14 +19,13 @@ const io = new Server(server, {
   transports: ["polling", "websocket"],
   pingTimeout: 60000,
   pingInterval: 25000,
-  connectTimeout: 45000
 });
 
 console.log('✅ Socket.io configurado');
 
 // ==================== MIDDLEWARE ====================
 app.use(cors({
-  origin: "*", 
+  origin: "*",
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true,
@@ -58,20 +57,84 @@ app.get('/', (req, res) => {
 });
 
 app.get('/socket-health', (req, res) => {
-  res.json({
-    status: 'ok',
-    onlineUsers: onlineUsers.size,
-    uptime: process.uptime()
-  });
+  res.json({ status: 'ok', uptime: process.uptime() });
 });
 
-// ==================== SOCKET ====================
+// ==================== SOCKET EVENTS ====================
 const onlineUsers = new Map();
 
 io.on('connection', (socket) => {
-  // ... (seu código de socket continua igual)
-  console.log('🟢 SOCKET CONECTADO:', socket.id);
-  // ... resto do seu código de socket
+  console.log(`🟢 SOCKET CONECTADO: ${socket.id}`);
+
+  // Autenticação do usuário
+  socket.on('authenticate', (userId) => {
+    if (userId) {
+      onlineUsers.set(userId, socket.id);
+      socket.userId = userId;
+      console.log(`👤 Usuário autenticado: ${userId}`);
+    }
+  });
+
+  // Entrar na sala da conversa
+  socket.on('joinConversation', (conversationId) => {
+    if (conversationId) {
+      socket.join(conversationId);
+      console.log(`📌 Usuário ${socket.userId} entrou na conversa: ${conversationId}`);
+    }
+  });
+
+  // Sair da sala
+  socket.on('leaveConversation', (conversationId) => {
+    if (conversationId) {
+      socket.leave(conversationId);
+    }
+  });
+
+  // Enviar mensagem
+  socket.on('sendMessage', async (data) => {
+    try {
+      const { conversationId, senderId, receiverId, text } = data;
+
+      if (!conversationId || !senderId || !receiverId || !text?.trim()) {
+        return socket.emit('error', { message: 'Dados da mensagem incompletos' });
+      }
+
+      const Message = require('./models/Message');
+      const Conversation = require('./models/Conversation');
+
+      // Salvar mensagem
+      const message = new Message({
+        conversationId,
+        senderId,
+        receiverId,
+        text: text.trim()
+      });
+
+      await message.save();
+
+      // Atualizar conversa
+      await Conversation.findByIdAndUpdate(conversationId, {
+        lastMessage: message._id,
+        lastMessageAt: new Date()
+      });
+
+      // Enviar para todos na sala da conversa
+      io.to(conversationId).emit('newMessage', message);
+
+      console.log(`✅ Mensagem enviada na conversa ${conversationId}`);
+
+    } catch (err) {
+      console.error('❌ Erro ao enviar mensagem:', err);
+      socket.emit('error', { message: 'Erro interno ao enviar mensagem' });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    if (socket.userId) {
+      onlineUsers.delete(socket.userId);
+    }
+    console.log(`🔴 Socket desconectado: ${socket.id}`);
+  });
 });
 
 // ==================== START SERVER ====================
