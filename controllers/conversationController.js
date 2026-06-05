@@ -59,25 +59,19 @@ exports.getMessages = async (req, res) => {
       return res.status(400).json({ message: 'ID da conversa é obrigatório' });
     }
 
-    // Busca a conversa SEM os populates problemáticos
     const conversation = await Conversation.findById(conversationId);
 
     if (!conversation) {
       console.log('❌ Conversa não encontrada no banco');
-      return res.status(404).json({ 
-        message: 'Conversa não encontrada',
-        conversationId 
-      });
+      return res.status(404).json({ message: 'Conversa não encontrada' });
     }
 
     console.log('✅ Conversa encontrada:', {
       id: conversation._id,
       participants: conversation.participants?.length || 0,
-      client: conversation.client,
-      profissional: conversation.profissional
     });
 
-    // Verificação de acesso (flexível)
+    // Verificação de acesso
     const isParticipant = 
       conversation.participants?.some(p => String(p?._id || p) === String(userId)) ||
       String(conversation.client?._id || conversation.client) === String(userId) ||
@@ -85,11 +79,11 @@ exports.getMessages = async (req, res) => {
 
     if (!isParticipant) {
       console.log('❌ Usuário não é participante');
-      return res.status(403).json({ message: 'Acesso negado a esta conversa' });
+      return res.status(403).json({ message: 'Acesso negado' });
     }
 
-    // Busca as mensagens - MUITO IMPORTANTE: verifique o nome do campo!
-    const messages = await Message.find({ conversation: conversationId })  // ← Teste primeiro com "conversation"
+    // Busca as mensagens (campo correto!)
+    const messages = await Message.find({ conversationId: conversationId })
       .sort({ createdAt: 1 });
 
     console.log(`✅ ${messages.length} mensagens encontradas`);
