@@ -3,13 +3,17 @@ const User = require('../models/User');
 
 const protect = async (req, res, next) => {
   try {
+    console.log("AUTH HEADER:", req.headers.authorization);
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
-        message: 'Token não fornecido ou mal formatado. Use: Bearer <token>'
+        message: 'Token não fornecido ou mal formatado'
       });
     }
+
+    // resto do código...
 
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
