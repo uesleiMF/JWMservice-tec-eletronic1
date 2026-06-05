@@ -13,14 +13,30 @@ const server = http.createServer(app);
 // ==================== SOCKET IO ====================
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
+    origin: "*",           // Em produção, troque por seu domínio frontend
+    methods: ["GET", "POST"],
     credentials: true
-  }
+  },
+  path: "/socket.io",
+  transports: ["polling", "websocket"],   // Ordem importante no Render
+  pingTimeout: 60000,      // 60 segundos
+  pingInterval: 25000,     // 25 segundos
+  connectTimeout: 45000,
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000
 });
 
+console.log('✅ Socket.io configurado');
 // ==================== MIDDLEWARE ====================
-app.use(cors());
+
+// ==================== MIDDLEWARE ====================
+app.use(cors({
+  origin: "*", 
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
 app.use(express.json());
 
 // ==================== MONGODB ====================
@@ -165,15 +181,19 @@ io.on('connection', (socket) => {
   });
 });
 // ==================== HEALTH CHECK ====================
-app.get('/', (req, res) => {
+app.get('/socket-health', (req, res) => {
   res.json({
-    status: 'online',
-    message: 'JW Service API funcionando 🚀'
+    status: 'ok',
+    onlineUsers: onlineUsers.size,
+    uptime: process.uptime()
   });
 });
 
 // ==================== START SERVER ====================
+
 const PORT = process.env.PORT || 5000;
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  console.log(`🌐 URL: https://jwmservice-tec-eletronic1.onrender.com`);
 });
