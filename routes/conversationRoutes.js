@@ -9,11 +9,16 @@ const {
 
 const { protect } = require('../middleware/authMiddleware');
 
-// Rotas protegidas
+// Rotas existentes
 router.get('/', protect, getConversations);
 router.get('/:id', protect, getConversationById);
 
-// ← REMOVA O PROTECT TEMPORARIAMENTE AQUI:
-router.get('/:id/messages', getMessages);   // sem protect
+// Rota de teste (SEM PROTECT)
+router.get('/:id/test-messages', (req, res) => {
+  res.json({ message: 'Rota de teste funcionando!', conversationId: req.params.id });
+});
+
+// Rota principal (com protect)
+router.get('/:id/messages', protect, getMessages);
 
 module.exports = router;
