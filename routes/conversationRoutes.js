@@ -8,20 +8,20 @@ const {
 
 const { protect } = require('../middleware/authMiddleware');
 
-// ====================== ROTA DE DEBUG (coloque aqui) ======================
-router.get('/:id/debug', protect, async (req, res) => {
+// ====================== ROTA DE DEBUG (SEM PROTECT) ======================
+router.get('/:id/debug', async (req, res) => {
   try {
     const conv = await Conversation.findById(req.params.id);
     res.json({
       found: !!conv,
       id: req.params.id,
-      conversation: conv
+      conversation: conv || null,
+      message: conv ? "Conversa encontrada" : "Conversa NÃO encontrada"
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
-
 // ==================== ROTAS PRINCIPAIS (mais específicas primeiro) ====================
 
 // Buscar mensagens
