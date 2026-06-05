@@ -9,16 +9,23 @@ const {
 
 const { protect } = require('../middleware/authMiddleware');
 
-// Rotas existentes
-router.get('/', protect, getConversations);
-router.get('/:id', protect, getConversationById);
+// ==================== ROTAS MAIS ESPECÍFICAS PRIMEIRO ====================
 
-// Rota de teste (SEM PROTECT)
+// Buscar mensagens de uma conversa
+router.get('/:id/messages', protect, getMessages);
+
+// Rota de teste
 router.get('/:id/test-messages', (req, res) => {
-  res.json({ message: 'Rota de teste funcionando!', conversationId: req.params.id });
+  res.json({ 
+    message: 'Rota de teste funcionando!', 
+    conversationId: req.params.id 
+  });
 });
 
-// Rota principal (com protect)
-router.get('/:id/messages', protect, getMessages);
+// Buscar uma conversa específica
+router.get('/:id', protect, getConversationById);
+
+// Buscar todas as conversas
+router.get('/', protect, getConversations);
 
 module.exports = router;

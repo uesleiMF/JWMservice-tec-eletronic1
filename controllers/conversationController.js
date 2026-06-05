@@ -60,29 +60,43 @@ exports.getMessages = async (req, res) => {
       return res.status(400).json({ message: 'ID da conversa é obrigatório' });
     }
 
-    const conversation = await Conversation.findById(conversationId);
+    // Busca mais completa
+    const conversation = await Conversation.findById(conversationId)
+      .populate('participants', 'name role')
+      .populate('client')
+      .populate('profissional');
 
     if (!conversation) {
-      console.log('❌ Conversa não encontrada');
-      return res.status(404).json({ message: 'Conversa não encontrada' });
+      console.log('❌ Conversa não encontrada no banco');
+      return res.status(404).json({ 
+        message: 'Conversa não encontrada',
+        conversationId 
+      });
     }
 
-    // Verificação mais flexível
+    console.log('✅ Conversa encontrada:', {
+      id: conversation._id,
+      participants: conversation.participants?.length || 0,
+      hasClient: !!conversation.client,
+      hasProfissional: !!conversation.profissional
+    });
+
+    // Verificação de acesso (melhorada)
     const isParticipant = 
-      conversation.participants?.some(p => String(p) === String(userId)) ||
+      conversation.participants?.some(p => String(p._id || p) === String(userId)) ||
       String(conversation.client?._id || conversation.client) === String(userId) ||
       String(conversation.profissional?._id || conversation.profissional) === String(userId);
 
     if (!isParticipant) {
       console.log('❌ Usuário não é participante');
-      return res.status(403).json({ message: 'Acesso negado' });
+      return res.status(403).json({ message: 'Acesso negado a esta conversa' });
     }
 
-    const messages = await Message.find({ conversationId })
+    const messages = await Message.find({ conversation: conversationId })  // ← Atenção aqui!
       .sort({ createdAt: 1 });
 
     console.log(`✅ ${messages.length} mensagens encontradas`);
-    res.json({ messages });
+    res.json({ messages, conversation });
 
   } catch (err) {
     console.error('❌ Erro ao buscar mensagens:', err);
