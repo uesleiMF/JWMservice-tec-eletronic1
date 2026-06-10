@@ -12,14 +12,16 @@ const server = http.createServer(app);
 // ==================== SOCKET IO ====================
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    origin: [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'https://jwmservice-tec-eletronic1.onrender.com'
+    ],
     credentials: true,
+    methods: ['GET', 'POST'],
   },
   path: '/socket.io',
   transports: ['websocket', 'polling'],
-  pingTimeout: 60000,
-  pingInterval: 25000,
 });
 
 console.log('✅ Socket.io configurado');
@@ -27,18 +29,21 @@ console.log('✅ Socket.io configurado');
 // ==================== MIDDLEWARE ====================
 app.use(
   cors({
-    origin: '*',
+    origin: [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'https://jwmservice-tec-eletronic1.onrender.com' // mantém produção
+    ],
+    credentials: true,           // ← Importante
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
       'Authorization',
       'X-Requested-With',
     ],
-    credentials: true,
     maxAge: 86400,
   })
 );
-
 app.use(express.json());
 
 // ==================== MONGODB ====================
