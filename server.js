@@ -1,5 +1,4 @@
 require('dotenv').config();
-
 const express = require('express');
 const http = require('http');
 const mongoose = require('mongoose');
@@ -9,7 +8,7 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 
-// ==================== SOCKET IO ====================
+// ==================== SOCKET.IO ====================
 const io = new Server(server, {
   cors: {
     origin: [
@@ -32,18 +31,15 @@ app.use(
     origin: [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
-      'https://jwmservice-tec-eletronic1.onrender.com' // mantém produção
+      'https://jwmservice-tec-eletronic1.onrender.com'
     ],
-    credentials: true,           // ← Importante
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Requested-With',
-    ],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     maxAge: 86400,
   })
 );
+
 app.use(express.json());
 
 // ==================== MONGODB ====================
@@ -79,93 +75,59 @@ app.get('/socket-health', (req, res) => {
   });
 });
 
-// ==================== SOCKET ====================
-const onlineUsers = new Map();
+// ==================== SOCKET LOGIC ====================
+const onlineUsers = new Map(); // userId -> socketId
 
 io.on('connection', (socket) => {
   console.log(`🟢 SOCKET CONECTADO: ${socket.id}`);
 
-  // ====================
-  // AUTENTICAÇÃO
-  // ====================
+  // ==================== AUTENTICAÇÃO ====================
   socket.on('authenticate', (userId) => {
     try {
       if (!userId) return;
-
       onlineUsers.set(String(userId), socket.id);
       socket.userId = String(userId);
-
-      console.log(`👤 Usuário autenticado: ${userId}`);
+      console.log(`👤 Usuário autenticado: ${userId} | Socket: ${socket.id}`);
     } catch (err) {
       console.error('Erro authenticate:', err);
     }
   });
 
-  // ====================
-  // ENTRAR NA CONVERSA
-  // ====================
+  // ==================== ENTRAR NA CONVERSA ====================
   socket.on('joinConversation', (conversationId) => {
     try {
       if (!conversationId) return;
-
       socket.join(String(conversationId));
-
-      console.log(
-        `📌 Usuário ${socket.userId} entrou na conversa ${conversationId}`
-      );
+      console.log(`📌 Usuário ${socket.userId} entrou na conversa ${conversationId}`);
     } catch (err) {
       console.error('Erro joinConversation:', err);
     }
   });
 
-  // ====================
-  // SAIR DA CONVERSA
-  // ====================
+  // ==================== SAIR DA CONVERSA ====================
   socket.on('leaveConversation', (conversationId) => {
     try {
       if (!conversationId) return;
-
       socket.leave(String(conversationId));
+      console.log(`🚪 Usuário ${socket.userId} saiu da conversa ${conversationId}`);
     } catch (err) {
       console.error('Erro leaveConversation:', err);
     }
   });
 
-  // ====================
-  // ENVIAR MENSAGEM
-  // ====================
+  // ==================== ENVIAR MENSAGEM (PRINCIPAL) ====================
   socket.on('sendMessage', async (data) => {
-    console.log('📨 RECEBIDO NO BACKEND:');
-    console.log(data);
+    console.log('📨 RECEBIDO NO BACKEND:', data);
 
     try {
-      const {
-        conversationId,
-        senderId,
-        receiverId,
-        text,
-      } = data;
+      const { conversationId, senderId, receiverId, text } = data;
 
-      console.log('conversationId:', conversationId);
-      console.log('senderId:', senderId);
-      console.log('receiverId:', receiverId);
-      console.log('text:', text);
-
-      if (
-        !conversationId ||
-        !senderId ||
-        !receiverId ||
-        !text?.trim()
-      ) {
+      if (!conversationId || !senderId || !receiverId || !text?.trim()) {
         console.log('❌ DADOS INVÁLIDOS');
-
-        return socket.emit('error', {
-          message: 'Dados da mensagem incompletos',
-        });
+        return socket.emit('error', { message: 'Dados da mensagem incompletos' });
       }
 
-      console.log('✅ PASSOU NA VALIDAÇÃO');
-
+      // Criar mensagem
       const message = new Message({
         conversationId,
         senderId,
@@ -175,6 +137,7 @@ io.on('connection', (socket) => {
 
       await message.save();
 
+      // Atualizar última mensagem da conversa
       await Conversation.findByIdAndUpdate(
         conversationId,
         {
@@ -184,35 +147,32 @@ io.on('connection', (socket) => {
         { new: true }
       );
 
-      io.to(String(conversationId)).emit(
-        'newMessage',
-        message
-      );
+      const messageToSend = message; // Pode fazer populate se quiser nome/foto
 
-      console.log(
-        `✅ Mensagem enviada na conversa ${conversationId}`
-      );
+      // 1. Envia para todos que estão na sala da conversa
+      io.to(String(conversationId)).emit('newMessage', messageToSend);
+
+      // 2. Fallback: Envia diretamente para o receiver (mesmo se não estiver na sala)
+      const receiverSocketId = onlineUsers.get(String(receiverId));
+      if (receiverSocketId && receiverSocketId !== socket.id) {
+        io.to(receiverSocketId).emit('newMessage', messageToSend);
+        console.log(`📤 Mensagem enviada DIRETAMENTE para receiver: ${receiverId}`);
+      }
+
+      console.log(`✅ Mensagem salva e enviada na conversa ${conversationId}`);
     } catch (err) {
       console.error('❌ Erro ao enviar mensagem:', err);
-
-      socket.emit('error', {
-        message: 'Erro interno ao enviar mensagem',
-      });
+      socket.emit('error', { message: 'Erro interno ao enviar mensagem' });
     }
   });
 
-  // ====================
-  // DESCONECTAR
-  // ====================
+  // ==================== DESCONECTAR ====================
   socket.on('disconnect', (reason) => {
     try {
       if (socket.userId) {
         onlineUsers.delete(String(socket.userId));
       }
-
-      console.log(
-        `🔴 SOCKET DESCONECTADO: ${socket.id} (${reason})`
-      );
+      console.log(`🔴 SOCKET DESCONECTADO: ${socket.id} (${reason})`);
     } catch (err) {
       console.error('Erro disconnect:', err);
     }
@@ -221,10 +181,7 @@ io.on('connection', (socket) => {
 
 // ==================== START SERVER ====================
 const PORT = process.env.PORT || 5000;
-
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
-  console.log(
-    '🌐 URL: https://jwmservice-tec-eletronic1.onrender.com'
-  );
+  console.log('🌐 URL: https://jwmservice-tec-eletronic1.onrender.com');
 });
