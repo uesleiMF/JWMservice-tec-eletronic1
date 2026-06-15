@@ -14,6 +14,7 @@ const io = new Server(server, {
     origin: [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
+      'https://jw-mservice-tec-eletric2.vercel.app',     // ← ADICIONE ESTA LINHA
       'https://jwmservice-tec-eletronic1.onrender.com'
     ],
     credentials: true,
@@ -31,6 +32,7 @@ app.use(
     origin: [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
+      'https://jw-mservice-tec-eletric2.vercel.app',     // ← ADICIONE ESTA LINHA
       'https://jwmservice-tec-eletronic1.onrender.com'
     ],
     credentials: true,
