@@ -26,16 +26,24 @@ const io = new Server(server, {
 
 console.log('✅ Socket.io configurado');
 
+
 // ==================== MIDDLEWARE ====================
+app.use(express.json());   // ← ESSA LINHA É OBRIGATÓRIA e deve vir primeiro
+
+// Middleware de debug (temporário - pode remover depois)
+app.use((req, res, next) => {
+  console.log(`📥 ${req.method} ${req.url} - Body:`, req.body);
+  next();
+});
+
 app.use(
   cors({
     origin: [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
-      'https://jw-mservice-tec-eletric2-6koimn7gx-uesleimfs-projects.vercel.app', // ← seu domínio atual
-      'https://jw-mservice-tec-eletric2.vercel.app/',
+      'https://jw-mservice-tec-eletric2-6koimn7gx-uesleimfs-projects.vercel.app',
       'https://jw-mservice-tec-eletric2.vercel.app',
-      'https://*.vercel.app',                    // ← libera TODOS os domínios do Vercel (melhor solução)
+      'https://*.vercel.app',
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
