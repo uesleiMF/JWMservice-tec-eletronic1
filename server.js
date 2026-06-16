@@ -32,8 +32,9 @@ app.use(
     origin: [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
-      'https://jw-mservice-tec-eletric2.vercel.app',     // ← ADICIONE ESTA LINHA
-      'https://jwmservice-tec-eletronic1.onrender.com'
+      'https://jw-mservice-tec-eletric2-6koimn7gx-uesleimfs-projects.vercel.app', // ← seu domínio atual
+      'https://jw-mservice-tec-eletric2.vercel.app',
+      'https://*.vercel.app',                    // ← libera TODOS os domínios do Vercel (melhor solução)
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -41,9 +42,6 @@ app.use(
     maxAge: 86400,
   })
 );
-
-app.use(express.json());
-
 // ==================== MONGODB ====================
 mongoose
   .connect(process.env.MONGO_URI)
