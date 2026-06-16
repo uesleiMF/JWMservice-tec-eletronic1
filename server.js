@@ -33,6 +33,7 @@ app.use(
       'http://localhost:3000',
       'http://127.0.0.1:3000',
       'https://jw-mservice-tec-eletric2-6koimn7gx-uesleimfs-projects.vercel.app', // ← seu domínio atual
+      'https://jw-mservice-tec-eletric2.vercel.app/',
       'https://jw-mservice-tec-eletric2.vercel.app',
       'https://*.vercel.app',                    // ← libera TODOS os domínios do Vercel (melhor solução)
     ],
