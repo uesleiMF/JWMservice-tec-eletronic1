@@ -8,33 +8,11 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 
-// ==================== SOCKET.IO ====================
-const io = new Server(server, {
-  cors: {
-    origin: [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'https://jw-mservice-tec-eletric2.vercel.app',     // ← ADICIONE ESTA LINHA
-      'https://jwmservice-tec-eletronic1.onrender.com'
-    ],
-    credentials: true,
-    methods: ['GET', 'POST'],
-  },
-  path: '/socket.io',
-  transports: ['websocket', 'polling'],
-});
-
-console.log('✅ Socket.io configurado');
-
+// ==================== CONFIGURAÇÕES GLOBAIS ====================
+const PORT = process.env.PORT || 5000;
 
 // ==================== MIDDLEWARE ====================
-app.use(express.json());   // ← ESSA LINHA É OBRIGATÓRIA e deve vir primeiro
-
-// Middleware de debug (temporário - pode remover depois)
-app.use((req, res, next) => {
-  console.log(`📥 ${req.method} ${req.url} - Body:`, req.body);
-  next();
-});
+app.use(express.json());
 
 app.use(
   cors({
@@ -51,13 +29,36 @@ app.use(
     maxAge: 86400,
   })
 );
-// ==================== MONGODB ====================
+
+// ==================== SOCKET.IO ====================
+const io = new Server(server, {
+  cors: {
+    origin: [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'https://jw-mservice-tec-eletric2-6koimn7gx-uesleimfs-projects.vercel.app',
+      'https://jw-mservice-tec-eletric2.vercel.app',
+      'https://*.vercel.app',
+    ],
+    credentials: true,
+    methods: ['GET', 'POST'],
+  },
+  path: '/socket.io',
+  transports: ['websocket', 'polling'],
+});
+
+console.log('✅ Socket.io configurado');
+
+// ==================== BANCO DE DADOS ====================
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ MongoDB conectado'))
-  .catch((err) => console.error('❌ MongoDB Error:', err));
+  .then(() => console.log('✅ MongoDB conectado com sucesso'))
+  .catch((err) => {
+    console.error('❌ Erro ao conectar no MongoDB:', err);
+    process.exit(1); // Encerra se não conseguir conectar
+  });
 
-// ==================== MODELS ====================
+// ==================== MODELOS ====================
 const Message = require('./models/Message');
 const Conversation = require('./models/Conversation');
 
@@ -69,11 +70,12 @@ app.use('/api/chat', require('./routes/chatRoutes'));
 app.use('/api/conversations', require('./routes/conversationRoutes'));
 app.use('/api/reviews', require('./routes/reviewRoutes'));
 
-// ==================== HEALTH ====================
+// ==================== ROTAS DE HEALTH ====================
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
     message: 'JW Service API funcionando 🚀',
+    version: '1.0.0',
   });
 });
 
@@ -81,6 +83,7 @@ app.get('/socket-health', (req, res) => {
   res.json({
     status: 'ok',
     uptime: process.uptime(),
+    sockets: io.engine.clientsCount,
   });
 });
 
@@ -90,7 +93,7 @@ const onlineUsers = new Map(); // userId -> socketId
 io.on('connection', (socket) => {
   console.log(`🟢 SOCKET CONECTADO: ${socket.id}`);
 
-  // ==================== AUTENTICAÇÃO ====================
+  // Autenticação
   socket.on('authenticate', (userId) => {
     try {
       if (!userId) return;
@@ -102,7 +105,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ==================== ENTRAR NA CONVERSA ====================
+  // Entrar na conversa
   socket.on('joinConversation', (conversationId) => {
     try {
       if (!conversationId) return;
@@ -113,7 +116,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ==================== SAIR DA CONVERSA ====================
+  // Sair da conversa
   socket.on('leaveConversation', (conversationId) => {
     try {
       if (!conversationId) return;
@@ -124,19 +127,15 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ==================== ENVIAR MENSAGEM (PRINCIPAL) ====================
+  // Enviar mensagem
   socket.on('sendMessage', async (data) => {
-    console.log('📨 RECEBIDO NO BACKEND:', data);
-
     try {
       const { conversationId, senderId, receiverId, text } = data;
 
       if (!conversationId || !senderId || !receiverId || !text?.trim()) {
-        console.log('❌ DADOS INVÁLIDOS');
         return socket.emit('error', { message: 'Dados da mensagem incompletos' });
       }
 
-      // Criar mensagem
       const message = new Message({
         conversationId,
         senderId,
@@ -146,7 +145,6 @@ io.on('connection', (socket) => {
 
       await message.save();
 
-      // Atualizar última mensagem da conversa
       await Conversation.findByIdAndUpdate(
         conversationId,
         {
@@ -156,26 +154,23 @@ io.on('connection', (socket) => {
         { new: true }
       );
 
-      const messageToSend = message; // Pode fazer populate se quiser nome/foto
+      // Envia para todos na sala
+      io.to(String(conversationId)).emit('newMessage', message);
 
-      // 1. Envia para todos que estão na sala da conversa
-      io.to(String(conversationId)).emit('newMessage', messageToSend);
-
-      // 2. Fallback: Envia diretamente para o receiver (mesmo se não estiver na sala)
+      // Envio direto para receiver (fallback)
       const receiverSocketId = onlineUsers.get(String(receiverId));
       if (receiverSocketId && receiverSocketId !== socket.id) {
-        io.to(receiverSocketId).emit('newMessage', messageToSend);
-        console.log(`📤 Mensagem enviada DIRETAMENTE para receiver: ${receiverId}`);
+        io.to(receiverSocketId).emit('newMessage', message);
       }
 
-      console.log(`✅ Mensagem salva e enviada na conversa ${conversationId}`);
+      console.log(`✅ Mensagem enviada na conversa ${conversationId}`);
     } catch (err) {
       console.error('❌ Erro ao enviar mensagem:', err);
       socket.emit('error', { message: 'Erro interno ao enviar mensagem' });
     }
   });
 
-  // ==================== DESCONECTAR ====================
+  // Desconexão
   socket.on('disconnect', (reason) => {
     try {
       if (socket.userId) {
@@ -188,9 +183,17 @@ io.on('connection', (socket) => {
   });
 });
 
-// ==================== START SERVER ====================
-const PORT = process.env.PORT || 5000;
+// ==================== MIDDLEWARE DE ERRO (final) ====================
+app.use((err, req, res, next) => {
+  console.error('❌ Erro não tratado:', err);
+  res.status(500).json({
+    success: false,
+    message: 'Erro interno do servidor',
+  });
+});
+
+// ==================== INICIAR SERVIDOR ====================
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
-  console.log('🌐 URL: https://jwmservice-tec-eletronic1.onrender.com');
+  console.log(`🌐 URL: https://jwmservice-tec-eletronic1.onrender.com`);
 });
