@@ -8,8 +8,7 @@ const User = require('../models/User');
 router.get('/', async (req, res) => {
   try {
     const profs = await User.find({ role: 'profissional' })
-      .select('name email servico especialidade phone descricao experiencia avaliacao foto latitude longitude city state online');
-    res.json(profs);
+     .select('name email servico especialidade phone descricao experiencia avaliacao foto latitude longitude city state online');   res.json(profs);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Erro ao buscar profissionais' });
