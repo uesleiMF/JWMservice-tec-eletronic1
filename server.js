@@ -1,4 +1,5 @@
 require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const mongoose = require('mongoose');
@@ -8,7 +9,7 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 
-// ==================== CONFIGURAÇÕES GLOBAIS ====================
+// ==================== CONFIGURAÇÕES ====================
 const PORT = process.env.PORT || 5000;
 
 // ==================== MIDDLEWARE ====================
@@ -36,18 +37,23 @@ const io = new Server(server, {
     origin: [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
-      'https://jw-mservice-tec-eletric2-6koimn7gx-uesleimfs-projects.vercel.app',
       'https://jw-mservice-tec-eletric2.vercel.app',
+      'https://jw-mservice-tec-eletric2-6koimn7gx-uesleimfs-projects.vercel.app',
       'https://*.vercel.app',
     ],
     credentials: true,
     methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   },
   path: '/socket.io',
   transports: ['websocket', 'polling'],
+  pingTimeout: 60000,        // ← Muito importante no Render
+  pingInterval: 25000,
+  connectTimeout: 45000,
+  allowEIO3: true,           // ← Ajuda com compatibilidade
 });
-
-console.log('✅ Socket.io configurado');
+// Forçar o uso correto do PORT do Render
+console.log('✅ Socket.io configurado com pingTimeout:', 60000);
 
 // ==================== BANCO DE DADOS ====================
 mongoose
@@ -55,7 +61,7 @@ mongoose
   .then(() => console.log('✅ MongoDB conectado com sucesso'))
   .catch((err) => {
     console.error('❌ Erro ao conectar no MongoDB:', err);
-    process.exit(1); // Encerra se não conseguir conectar
+    process.exit(1);
   });
 
 // ==================== MODELOS ====================
@@ -63,14 +69,23 @@ const Message = require('./models/Message');
 const Conversation = require('./models/Conversation');
 
 // ==================== ROTAS ====================
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/profissionais', require('./routes/profissionais'));
-app.use('/api/orders', require('./routes/orders'));
-app.use('/api/chat', require('./routes/chatRoutes'));
-app.use('/api/conversations', require('./routes/conversationRoutes'));
-app.use('/api/reviews', require('./routes/reviewRoutes'));
+const authRoutes = require('./routes/auth');
+const profissionalRoutes = require('./routes/profissionais');
+const orderRoutes = require('./routes/orders');
+const chatRoutes = require('./routes/chatRoutes');
+const conversationRoutes = require('./routes/conversationRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
+const userRoutes = require('./routes/userRoutes'); // 👈 NOVO
 
-// ==================== ROTAS DE HEALTH ====================
+app.use('/api/auth', authRoutes);
+app.use('/api/profissionais', profissionalRoutes);
+app.use('/api/users', userRoutes); // 👈 NOVO
+app.use('/api/orders', orderRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/conversations', conversationRoutes);
+app.use('/api/reviews', reviewRoutes);
+
+// ==================== HEALTH CHECK ====================
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
@@ -87,53 +102,37 @@ app.get('/socket-health', (req, res) => {
   });
 });
 
-// ==================== SOCKET LOGIC ====================
-const onlineUsers = new Map(); // userId -> socketId
+// ==================== SOCKET.IO ====================
+const onlineUsers = new Map();
 
 io.on('connection', (socket) => {
   console.log(`🟢 SOCKET CONECTADO: ${socket.id}`);
 
-  // Autenticação
   socket.on('authenticate', (userId) => {
-    try {
-      if (!userId) return;
-      onlineUsers.set(String(userId), socket.id);
-      socket.userId = String(userId);
-      console.log(`👤 Usuário autenticado: ${userId} | Socket: ${socket.id}`);
-    } catch (err) {
-      console.error('Erro authenticate:', err);
-    }
+    if (!userId) return;
+
+    onlineUsers.set(String(userId), socket.id);
+    socket.userId = String(userId);
+
+    console.log(`👤 Usuário autenticado: ${userId}`);
   });
 
-  // Entrar na conversa
   socket.on('joinConversation', (conversationId) => {
-    try {
-      if (!conversationId) return;
-      socket.join(String(conversationId));
-      console.log(`📌 Usuário ${socket.userId} entrou na conversa ${conversationId}`);
-    } catch (err) {
-      console.error('Erro joinConversation:', err);
-    }
+    if (!conversationId) return;
+    socket.join(String(conversationId));
   });
 
-  // Sair da conversa
   socket.on('leaveConversation', (conversationId) => {
-    try {
-      if (!conversationId) return;
-      socket.leave(String(conversationId));
-      console.log(`🚪 Usuário ${socket.userId} saiu da conversa ${conversationId}`);
-    } catch (err) {
-      console.error('Erro leaveConversation:', err);
-    }
+    if (!conversationId) return;
+    socket.leave(String(conversationId));
   });
 
-  // Enviar mensagem
   socket.on('sendMessage', async (data) => {
     try {
       const { conversationId, senderId, receiverId, text } = data;
 
       if (!conversationId || !senderId || !receiverId || !text?.trim()) {
-        return socket.emit('error', { message: 'Dados da mensagem incompletos' });
+        return socket.emit('error', { message: 'Dados inválidos' });
       }
 
       const message = new Message({
@@ -145,55 +144,47 @@ io.on('connection', (socket) => {
 
       await message.save();
 
-      await Conversation.findByIdAndUpdate(
-        conversationId,
-        {
-          lastMessage: message._id,
-          lastMessageAt: new Date(),
-        },
-        { new: true }
-      );
+      await Conversation.findByIdAndUpdate(conversationId, {
+        lastMessage: message._id,
+        lastMessageAt: new Date(),
+      });
 
-      // Envia para todos na sala
       io.to(String(conversationId)).emit('newMessage', message);
 
-      // Envio direto para receiver (fallback)
       const receiverSocketId = onlineUsers.get(String(receiverId));
-      if (receiverSocketId && receiverSocketId !== socket.id) {
+      if (receiverSocketId) {
         io.to(receiverSocketId).emit('newMessage', message);
       }
 
-      console.log(`✅ Mensagem enviada na conversa ${conversationId}`);
+      console.log(`💬 Mensagem enviada: ${conversationId}`);
     } catch (err) {
       console.error('❌ Erro ao enviar mensagem:', err);
-      socket.emit('error', { message: 'Erro interno ao enviar mensagem' });
+      socket.emit('error', { message: 'Erro interno' });
     }
   });
 
-  // Desconexão
-  socket.on('disconnect', (reason) => {
-    try {
-      if (socket.userId) {
-        onlineUsers.delete(String(socket.userId));
-      }
-      console.log(`🔴 SOCKET DESCONECTADO: ${socket.id} (${reason})`);
-    } catch (err) {
-      console.error('Erro disconnect:', err);
+  socket.on('disconnect', () => {
+    if (socket.userId) {
+      onlineUsers.delete(String(socket.userId));
     }
+
+    console.log(`🔴 SOCKET DESCONECTADO: ${socket.id}`);
   });
 });
 
-// ==================== MIDDLEWARE DE ERRO (final) ====================
+// ==================== ERRO GLOBAL ====================
 app.use((err, req, res, next) => {
-  console.error('❌ Erro não tratado:', err);
+  console.error('❌ Erro:', err);
+
   res.status(500).json({
     success: false,
     message: 'Erro interno do servidor',
   });
 });
 
-// ==================== INICIAR SERVIDOR ====================
+// ==================== START ====================
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
-  console.log(`🌐 URL: https://jwmservice-tec-eletronic1.onrender.com`);
+  console.log(`🌐 API: https://jwmservice-tec-eletronic1.onrender.com`);
 });
+

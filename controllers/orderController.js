@@ -1,45 +1,64 @@
 const Order = require('../models/Order');
-const Conversation = require('../models/Conversation'); // ← Adicione esta linha
+const Conversation = require('../models/Conversation');
 
-// ====================== CRIAR PEDIDO + CONVERSA ======================
+// ======================================================
+// CRIAR PEDIDO + CONVERSA (VERSÃO SEGURA)
+// ======================================================
+
 exports.createOrder = async (req, res) => {
-  const { clienteId, profissionalId, servico, descricao, valor } = req.body;
-
-  if (!clienteId || !profissionalId || !servico) {
-    return res.status(400).json({ 
-      message: 'Cliente, Profissional e Serviço são obrigatórios' 
-    });
-  }
-
   try {
-    // 1. Criar o Pedido
-    const newOrder = new Order({
+
+    const {
+      profissionalId,
+      servico,
+      descricao,
+      valor
+    } = req.body;
+
+    const clienteId = req.user._id; // 🔥 agora vem do token
+
+    if (!profissionalId || !servico) {
+      return res.status(400).json({
+        message: 'Profissional e serviço são obrigatórios'
+      });
+    }
+
+    // ======================================================
+    // 1. CRIAR PEDIDO
+    // ======================================================
+
+    const newOrder = await Order.create({
       cliente: clienteId,
       profissional: profissionalId,
       servico: servico.trim(),
-      descricao: descricao ? descricao.trim() : '',
+      descricao: descricao?.trim() || '',
       valor: valor || 0,
       status: 'pendente'
     });
 
-    await newOrder.save();
+    // ======================================================
+    // 2. CRIAR CONVERSA
+    // ======================================================
 
-    // 2. Criar a Conversa vinculada
-    const newConversation = new Conversation({
+    const newConversation = await Conversation.create({
       participants: [clienteId, profissionalId],
-      order: newOrder._id,
+      order: newOrder._id
     });
 
-    await newConversation.save();
+    // ======================================================
+    // 3. VINCULAR CONVERSA NO PEDIDO
+    // ======================================================
 
-    // 3. Vincular conversa no pedido
     newOrder.conversation = newConversation._id;
     await newOrder.save();
 
-    // 4. Retornar dados completos
+    // ======================================================
+    // 4. POPULAR RESPOSTA
+    // ======================================================
+
     const orderPopulated = await Order.findById(newOrder._id)
-      .populate('cliente', 'name email phone avatar')
-      .populate('profissional', 'name email phone avatar');
+      .populate('cliente', 'name email phone foto')
+      .populate('profissional', 'name email phone foto servico avaliacaoMedia');
 
     res.status(201).json({
       success: true,
@@ -49,18 +68,10 @@ exports.createOrder = async (req, res) => {
 
   } catch (err) {
     console.error('Erro ao criar pedido:', err);
-    res.status(500).json({ message: 'Erro ao criar pedido' });
+
+    res.status(500).json({
+      message: 'Erro ao criar pedido',
+      error: err.message
+    });
   }
 };
-
-// ====================== DELETE (seu código atual) ======================
-exports.deleteOrder = async (req, res) => {
-  try {
-    await Order.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Pedido deletado com sucesso' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// Pode adicionar as outras funções aqui também (aceitar, recusar, etc.)

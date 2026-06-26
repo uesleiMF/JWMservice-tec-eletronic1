@@ -1,26 +1,41 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const { protect } = require('../middleware/authMiddleware');
 
-// ==================== ROTAS PÚBLICAS ====================
+// ======================================================
+// LISTAR PROFISSIONAIS
+// ======================================================
 
-// Buscar TODOS os profissionais
 router.get('/', async (req, res) => {
   try {
+
     const profs = await User.find({ role: 'profissional' })
-     .select('name email servico especialidade phone descricao experiencia avaliacao foto latitude longitude city state online');   res.json(profs);
+      .select(
+        'name email servico especialidade phone descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial verificado premium isOnline location'
+      );
+
+    res.json(profs);
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Erro ao buscar profissionais' });
   }
 });
 
-// Buscar profissionais PRÓXIMOS
+// ======================================================
+// PROFISSIONAIS PRÓXIMOS (SEGURADO + FALLBACK)
+// ======================================================
+
 router.get('/proximos', async (req, res) => {
   try {
-    const { latitude, longitude, raio = 50 } = req.query;
+
+    const { latitude, longitude, raio = 50000 } = req.query;
+
     if (!latitude || !longitude) {
-      return res.status(400).json({ message: 'Latitude e longitude são obrigatórios' });
+      return res.status(400).json({
+        message: 'Latitude e longitude são obrigatórios'
+      });
     }
 
     const lat = parseFloat(latitude);
@@ -28,106 +43,159 @@ router.get('/proximos', async (req, res) => {
 
     const profissionais = await User.find({
       role: 'profissional',
-      latitude: { $exists: true },
-      longitude: { $exists: true }
-    }).select('name email servico especialidade phone descricao experiencia avaliacao foto latitude longitude city state online');
+      location: {
+        $near: {
+          $geometry: {
+            type: 'Point',
+            coordinates: [lon, lat]
+          },
+          $maxDistance: parseInt(raio)
+        }
+      }
+    })
+    .select('name servico especialidade foto city state avaliacaoMedia totalAvaliacoes precoInicial verificado premium isOnline location')
+    .limit(20);
 
-    const profissionaisComDistancia = profissionais.map(p => {
-      const distancia = calcularDistancia(lat, lon, p.latitude, p.longitude);
-      return { ...p.toObject(), distance: distancia };
-    });
+    res.json(profissionais);
 
-    profissionaisComDistancia.sort((a, b) => a.distance - b.distance);
-    res.json(profissionaisComDistancia);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Erro ao buscar profissionais próximos' });
+    res.status(500).json({
+      message: 'Erro ao buscar profissionais próximos'
+    });
   }
 });
 
-// Buscar um profissional por ID (para Perfil Público)
+// ======================================================
+// PROFISSIONAL POR ID
+// ======================================================
+
 router.get('/:id', async (req, res) => {
   try {
+
     const profissional = await User.findOne({
       _id: req.params.id,
       role: 'profissional'
-    }).select('name email servico especialidade phone descricao experiencia avaliacao foto latitude longitude city state online');
+    }).select(
+      'name email servico especialidade phone descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial portfolio horarios diasAtendimento raioAtendimento verificado premium servicosConcluidos favoritos visualizacoes instagram facebook site location'
+    );
 
     if (!profissional) {
-      return res.status(404).json({ message: 'Profissional não encontrado' });
+      return res.status(404).json({
+        message: 'Profissional não encontrado'
+      });
     }
 
     res.json(profissional);
+
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Erro ao buscar profissional' });
+    res.status(500).json({
+      message: 'Erro ao buscar profissional'
+    });
   }
 });
 
-// ==================== ROTAS DO PERFIL (Temporário - sem autenticação) ====================
+// ======================================================
+// MEU PERFIL (PROTEGIDO)
+// ======================================================
 
-// Buscar MEU perfil
-router.get('/meu', async (req, res) => {
+router.get('/meu', protect, async (req, res) => {
   try {
-    const userId = req.query.userId;
-    if (!userId) {
-      return res.status(400).json({ message: 'userId é obrigatório na query (?userId=xxx)' });
-    }
 
-    const user = await User.findById(userId)
-      .select('name email phone servico especialidade descricao experiencia foto city state latitude longitude online');
+    const userId = req.user._id;
 
-    if (!user) {
-      return res.status(404).json({ message: 'Perfil não encontrado' });
-    }
-
-    res.json(user);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Erro ao buscar perfil' });
-  }
-});
-
-// Atualizar MEU perfil
-router.put('/meu', async (req, res) => {
-  try {
-    const userId = req.query.userId;
-    if (!userId) {
-      return res.status(400).json({ message: 'userId é obrigatório na query' });
-    }
-
-    const { name, phone, servico, especialidade, descricao, experiencia, city, state, foto } = req.body;
-
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { name, phone, servico, especialidade, descricao, experiencia, city, state, foto },
-      { new: true, runValidators: true }
+    const user = await User.findOne({
+      _id: userId,
+      role: 'profissional'
+    }).select(
+      'name email phone servico especialidade descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial portfolio horarios diasAtendimento latitude longitude'
     );
 
     if (!user) {
-      return res.status(404).json({ message: 'Usuário não encontrado' });
+      return res.status(404).json({
+        message: 'Perfil não encontrado'
+      });
     }
 
-    res.json({ 
-      message: 'Perfil atualizado com sucesso!', 
-      user 
-    });
+    res.json(user);
+
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Erro ao atualizar perfil' });
+    res.status(500).json({
+      message: 'Erro ao buscar perfil'
+    });
   }
 });
 
-// ==================== FUNÇÃO AUXILIAR ====================
-function calcularDistancia(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
+// ======================================================
+// ATUALIZAR MEU PERFIL (SEGURADO)
+// ======================================================
+
+router.put('/meu', protect, async (req, res) => {
+  try {
+
+    const userId = req.user._id;
+
+    const allowedFields = {
+      name: req.body.name,
+      phone: req.body.phone,
+      servico: req.body.servico,
+      especialidade: req.body.especialidade,
+      descricao: req.body.descricao,
+      experiencia: req.body.experiencia,
+      city: req.body.city,
+      state: req.body.state,
+      foto: req.body.foto,
+      precoInicial: req.body.precoInicial,
+      raioAtendimento: req.body.raioAtendimento,
+      horarios: req.body.horarios,
+      diasAtendimento: req.body.diasAtendimento,
+      instagram: req.body.instagram,
+      facebook: req.body.facebook,
+      site: req.body.site
+    };
+
+    // geolocalização separada (seguro)
+    if (req.body.latitude && req.body.longitude) {
+      allowedFields.location = {
+        type: 'Point',
+        coordinates: [
+          parseFloat(req.body.longitude),
+          parseFloat(req.body.latitude)
+        ]
+      };
+    }
+
+    const user = await User.findOneAndUpdate(
+      {
+        _id: userId,
+        role: 'profissional'
+      },
+      { $set: allowedFields },
+      {
+        new: true,
+        runValidators: true
+      }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        message: 'Usuário não encontrado'
+      });
+    }
+
+    res.json({
+      message: 'Perfil atualizado com sucesso!',
+      user
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      message: 'Erro ao atualizar perfil'
+    });
+  }
+});
 
 module.exports = router;

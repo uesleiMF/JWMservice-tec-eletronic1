@@ -3,8 +3,6 @@ const User = require('../models/User');
 
 const protect = async (req, res, next) => {
   try {
-    console.log("AUTH HEADER:", req.headers.authorization);
-
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -13,35 +11,50 @@ const protect = async (req, res, next) => {
       });
     }
 
-    // resto do código...
-
     const token = authHeader.split(' ')[1];
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await User.findById(decoded.id)
-      .select('-passwordHash')
-      .lean();
+    const user = await User.findById(decoded.id).select('-passwordHash');
 
     if (!user) {
-      return res.status(401).json({ message: 'Usuário não encontrado' });
+      return res.status(401).json({
+        message: 'Usuário não encontrado'
+      });
     }
 
-    // Adiciona o usuário na requisição
-    req.user = user;
-    req.user.id = user._id.toString();   // importante para o controller
+    // ======================================================
+    // PADRÃO ÚNICO (IMPORTANTE)
+    // ======================================================
+    req.user = {
+      _id: user._id,
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone
+    };
 
     next();
+
   } catch (err) {
-    console.error('Erro no authMiddleware:', err.message);
+    console.error('Auth error:', err.message);
 
     if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ message: 'Token expirado. Faça login novamente.' });
-    }
-    if (err.name === 'JsonWebTokenError') {
-      return res.status(401).json({ message: 'Token inválido.' });
+      return res.status(401).json({
+        message: 'Token expirado. Faça login novamente.'
+      });
     }
 
-    res.status(401).json({ message: 'Não autorizado' });
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({
+        message: 'Token inválido.'
+      });
+    }
+
+    return res.status(401).json({
+      message: 'Não autorizado'
+    });
   }
 };
 

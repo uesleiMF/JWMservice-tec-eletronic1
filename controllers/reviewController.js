@@ -1,26 +1,64 @@
 const Review = require('../models/Review');
-const Order = require('../models/Order'); // ajuste o caminho se necessário
+const Order = require('../models/Order');
+const User = require('../models/User');
 
-// Criar avaliação
+// ======================================================
+// CRIAR AVALIAÇÃO (VERSÃO FINAL)
+// ======================================================
+
 const createReview = async (req, res) => {
   try {
+
     const { orderId, rating, comment } = req.body;
-    const clientId = req.user.id;
 
-    // Verifica se o pedido existe e pertence ao cliente
+    const clientId = req.user._id;
+
+    if (!orderId || !rating) {
+      return res.status(400).json({
+        message: 'orderId e rating são obrigatórios'
+      });
+    }
+
+    // ===============================
+    // VERIFICAR PEDIDO
+    // ===============================
+
     const order = await Order.findById(orderId);
+
     if (!order) {
-      return res.status(404).json({ message: 'Pedido não encontrado' });
-    }
-    if (order.client.toString() !== clientId) {
-      return res.status(403).json({ message: 'Você só pode avaliar seus próprios pedidos' });
+      return res.status(404).json({
+        message: 'Pedido não encontrado'
+      });
     }
 
-    // Verifica se já existe review para este pedido
-    const existingReview = await Review.findOne({ orderId });
-    if (existingReview) {
-      return res.status(400).json({ message: 'Este pedido já foi avaliado' });
+    // 🔥 só pode avaliar pedido finalizado
+    if (order.status !== 'finalizado') {
+      return res.status(400).json({
+        message: 'Só é possível avaliar serviços finalizados'
+      });
     }
+
+    if (order.client.toString() !== clientId.toString()) {
+      return res.status(403).json({
+        message: 'Você só pode avaliar seus próprios pedidos'
+      });
+    }
+
+    // ===============================
+    // EVITAR DUPLICIDADE
+    // ===============================
+
+    const existingReview = await Review.findOne({ orderId });
+
+    if (existingReview) {
+      return res.status(400).json({
+        message: 'Este pedido já foi avaliado'
+      });
+    }
+
+    // ===============================
+    // CRIAR REVIEW
+    // ===============================
 
     const review = await Review.create({
       orderId,
@@ -30,32 +68,74 @@ const createReview = async (req, res) => {
       comment
     });
 
-    res.status(201).json(review);
+    // ===============================
+    // ATUALIZAR PROFISSIONAL (OTIMIZADO)
+    // ===============================
+
+    const stats = await Review.aggregate([
+      { $match: { professionalId: order.professional } },
+      {
+        $group: {
+          _id: '$professionalId',
+          total: { $sum: 1 },
+          media: { $avg: '$rating' }
+        }
+      }
+    ]);
+
+    const total = stats[0]?.total || 0;
+    const media = stats[0]?.media || 0;
+
+    await User.findByIdAndUpdate(order.professional, {
+      avaliacaoMedia: Number(media.toFixed(1)),
+      totalAvaliacoes: total
+    });
+
+    res.status(201).json({
+      message: 'Avaliação criada com sucesso',
+      review
+    });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error(error);
+
+    res.status(500).json({
+      message: 'Erro ao criar avaliação',
+      error: error.message
+    });
   }
 };
 
-// Pegar avaliações de um profissional
+// ======================================================
+// LISTAR AVALIAÇÕES
+// ======================================================
+
 const getProfessionalReviews = async (req, res) => {
   try {
+
     const { professionalId } = req.params;
 
     const reviews = await Review.find({ professionalId })
-      .populate('clientId', 'name avatar')
+      .populate('clientId', 'name foto')
       .sort({ createdAt: -1 });
 
-    const averageRating = reviews.length > 0 
-      ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
-      : 0;
+    // 🔥 usa dados reais do User (mais confiável)
+    const professional = await User.findById(professionalId)
+      .select('avaliacaoMedia totalAvaliacoes');
 
     res.json({
       reviews,
-      averageRating: Number(averageRating),
-      totalReviews: reviews.length
+      averageRating: professional?.avaliacaoMedia || 0,
+      totalReviews: professional?.totalAvaliacoes || 0
     });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error(error);
+
+    res.status(500).json({
+      message: 'Erro ao buscar avaliações',
+      error: error.message
+    });
   }
 };
 

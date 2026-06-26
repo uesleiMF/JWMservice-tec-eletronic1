@@ -1,45 +1,47 @@
 const express = require('express');
 const router = express.Router();
+
 const Order = require('../models/Order');
 const Conversation = require('../models/Conversation');
+const { protect } = require('../middleware/authMiddleware');
 
-// ====================== CRIAR PEDIDO + CONVERSA ======================
-router.post('/', async (req, res) => {
-  const { clienteId, profissionalId, servico, descricao, valor } = req.body;
+// ======================================================
+// CRIAR PEDIDO + CONVERSA (SEGURO)
+// ======================================================
 
-  if (!clienteId || !profissionalId || !servico) {
-    return res.status(400).json({ message: 'Cliente, Profissional e Serviço são obrigatórios' });
-  }
-
+router.post('/', protect, async (req, res) => {
   try {
-    // 1. Criar Pedido
-    const newOrder = new Order({
+
+    const { profissionalId, servico, descricao, valor } = req.body;
+
+    const clienteId = req.user._id;
+
+    if (!profissionalId || !servico) {
+      return res.status(400).json({
+        message: 'Profissional e serviço são obrigatórios'
+      });
+    }
+
+    const newOrder = await Order.create({
       cliente: clienteId,
       profissional: profissionalId,
       servico: servico.trim(),
-      descricao: descricao ? descricao.trim() : '',
+      descricao: descricao?.trim() || '',
       valor: valor || 0,
       status: 'pendente'
     });
 
-    await newOrder.save();
-
-    // 2. Criar Conversa
-    const newConversation = new Conversation({
+    const newConversation = await Conversation.create({
       participants: [clienteId, profissionalId],
-      order: newOrder._id,
+      order: newOrder._id
     });
 
-    await newConversation.save();
-
-    // 3. Vincular conversa no pedido
     newOrder.conversation = newConversation._id;
     await newOrder.save();
 
-    // 4. Retornar dados completos
     const orderPopulated = await Order.findById(newOrder._id)
-      .populate('cliente', 'name email phone avatar')
-      .populate('profissional', 'name email phone avatar');
+      .populate('cliente', 'name email phone foto')
+      .populate('profissional', 'name email phone foto');
 
     res.status(201).json({
       success: true,
@@ -48,110 +50,177 @@ router.post('/', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Erro ao criar pedido:', err);
+    console.error(err);
     res.status(500).json({ message: 'Erro ao criar pedido' });
   }
 });
 
-// ====================== OUTRAS ROTAS ======================
-router.get('/professional/:id', async (req, res) => {
+// ======================================================
+// PEDIDOS DO PROFISSIONAL
+// ======================================================
+
+router.get('/professional/:id', protect, async (req, res) => {
   try {
-    const orders = await Order.find({ profissional: req.params.id })
-      .populate('cliente', 'name email phone avatar')
+
+    const orders = await Order.find({
+      profissional: req.params.id
+    })
+      .populate('cliente', 'name email phone foto')
       .sort({ createdAt: -1 });
+
     res.json(orders);
+
   } catch (err) {
-    console.error('Erro ao buscar pedidos:', err);
     res.status(500).json({ message: 'Erro ao buscar pedidos' });
   }
 });
 
-// Aceitar Pedido
-router.patch('/:id/aceitar', async (req, res) => {
-  try {
-    const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+// ======================================================
+// ACEITAR PEDIDO
+// ======================================================
 
-    if (order.status !== 'pendente') {
-      return res.status(400).json({ message: `Status atual: ${order.status}. Não pode aceitar.` });
+router.patch('/:id/aceitar', protect, async (req, res) => {
+  try {
+
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ message: 'Pedido não encontrado' });
     }
 
-    order.status = 'em_andamento';
+    // 🔥 segurança: só profissional dono pode aceitar
+    if (order.profissional.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Sem permissão' });
+    }
+
+    if (order.status !== 'pendente') {
+      return res.status(400).json({ message: 'Pedido já foi processado' });
+    }
+
+    order.status = 'aceito';
     await order.save();
 
-    const updated = await Order.findById(order._id)
-      .populate('cliente', 'name email phone avatar');
+    res.json({
+      message: 'Pedido aceito com sucesso',
+      order
+    });
 
-    res.json({ message: 'Pedido aceito com sucesso!', order: updated });
   } catch (err) {
-    console.error('Erro ao aceitar pedido:', err);
     res.status(500).json({ message: 'Erro ao aceitar pedido' });
   }
 });
 
-// Recusar Pedido
-router.patch('/:id/recusar', async (req, res) => {
+// ======================================================
+// RECUSAR PEDIDO
+// ======================================================
+
+router.patch('/:id/recusar', protect, async (req, res) => {
   try {
+
     const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+
+    if (!order) {
+      return res.status(404).json({ message: 'Pedido não encontrado' });
+    }
+
+    if (order.profissional.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Sem permissão' });
+    }
 
     order.status = 'recusado';
     await order.save();
 
-    const updated = await Order.findById(order._id)
-      .populate('cliente', 'name email phone avatar');
+    res.json({
+      message: 'Pedido recusado',
+      order
+    });
 
-    res.json({ message: 'Pedido recusado com sucesso!', order: updated });
   } catch (err) {
-    console.error('Erro ao recusar pedido:', err);
     res.status(500).json({ message: 'Erro ao recusar pedido' });
   }
 });
 
-// Iniciar Serviço
-router.patch('/:id/iniciar', async (req, res) => {
+// ======================================================
+// INICIAR SERVIÇO
+// ======================================================
+
+router.patch('/:id/iniciar', protect, async (req, res) => {
   try {
+
     const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+
+    if (order.profissional.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Sem permissão' });
+    }
 
     if (order.status !== 'aceito') {
-      return res.status(400).json({ message: 'Só pedidos aceitos podem ser iniciados' });
+      return res.status(400).json({ message: 'Pedido precisa estar aceito' });
     }
 
     order.status = 'em_andamento';
     await order.save();
 
-    const updated = await Order.findById(order._id)
-      .populate('cliente', 'name email phone avatar');
+    res.json({
+      message: 'Serviço iniciado',
+      order
+    });
 
-    res.json({ message: 'Serviço iniciado!', order: updated });
   } catch (err) {
     res.status(500).json({ message: 'Erro ao iniciar serviço' });
   }
 });
 
-// Finalizar Serviço
-router.patch('/:id/finalizar', async (req, res) => {
+// ======================================================
+// FINALIZAR SERVIÇO
+// ======================================================
+
+router.patch('/:id/finalizar', protect, async (req, res) => {
   try {
+
     const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+
+    if (order.profissional.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Sem permissão' });
+    }
 
     order.status = 'finalizado';
     order.dataFinalizacao = new Date();
+
     await order.save();
 
-    res.json({ message: 'Serviço finalizado com sucesso!', order });
+    res.json({
+      message: 'Serviço finalizado',
+      order
+    });
+
   } catch (err) {
     res.status(500).json({ message: 'Erro ao finalizar serviço' });
   }
 });
 
-router.delete('/:id', async (req, res) => {
+// ======================================================
+// DELETE (SEGURANÇA)
+// ======================================================
+
+router.delete('/:id', protect, async (req, res) => {
   try {
-    await Order.findByIdAndDelete(req.params.id);
+
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ message: 'Pedido não encontrado' });
+    }
+
+    if (order.cliente.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Sem permissão' });
+    }
+
+    await order.deleteOne();
+
     res.json({ message: 'Pedido deletado com sucesso' });
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ message: 'Erro ao deletar pedido' });
   }
 });
 
