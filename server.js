@@ -1,5 +1,4 @@
 require('dotenv').config();
-
 const express = require('express');
 const http = require('http');
 const mongoose = require('mongoose');
@@ -9,7 +8,6 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 
-// ==================== CONFIGURAÇÕES ====================
 const PORT = process.env.PORT || 5000;
 
 // ==================== MIDDLEWARE ====================
@@ -20,8 +18,8 @@ app.use(
     origin: [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
-      'https://jw-mservice-tec-eletric2-6koimn7gx-uesleimfs-projects.vercel.app',
       'https://jw-mservice-tec-eletric2.vercel.app',
+      'https://jw-mservice-tec-eletric2-6koimn7gx-uesleimfs-projects.vercel.app',
       'https://*.vercel.app',
     ],
     credentials: true,
@@ -38,21 +36,18 @@ const io = new Server(server, {
       'http://localhost:3000',
       'http://127.0.0.1:3000',
       'https://jw-mservice-tec-eletric2.vercel.app',
-      'https://jw-mservice-tec-eletric2-6koimn7gx-uesleimfs-projects.vercel.app',
       'https://*.vercel.app',
     ],
     credentials: true,
     methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
   },
   path: '/socket.io',
   transports: ['websocket', 'polling'],
-  pingTimeout: 60000,        // ← Muito importante no Render
+  pingTimeout: 60000,
   pingInterval: 25000,
   connectTimeout: 45000,
-  allowEIO3: true,           // ← Ajuda com compatibilidade
 });
-// Forçar o uso correto do PORT do Render
+
 console.log('✅ Socket.io configurado com pingTimeout:', 60000);
 
 // ==================== BANCO DE DADOS ====================
@@ -64,10 +59,6 @@ mongoose
     process.exit(1);
   });
 
-// ==================== MODELOS ====================
-const Message = require('./models/Message');
-const Conversation = require('./models/Conversation');
-
 // ==================== ROTAS ====================
 const authRoutes = require('./routes/auth');
 const profissionalRoutes = require('./routes/profissionais');
@@ -75,11 +66,11 @@ const orderRoutes = require('./routes/orders');
 const chatRoutes = require('./routes/chatRoutes');
 const conversationRoutes = require('./routes/conversationRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
-const userRoutes = require('./routes/userRoutes'); // 👈 NOVO
+const userRoutes = require('./routes/userRoutes');
 
 app.use('/api/auth', authRoutes);
-app.use('/api/profissionais', profissionalRoutes);
-app.use('/api/users', userRoutes); // 👈 NOVO
+app.use('/api/profissionais', profissionalRoutes);   // ← Muito importante
+app.use('/api/users', userRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/conversations', conversationRoutes);
@@ -102,7 +93,7 @@ app.get('/socket-health', (req, res) => {
   });
 });
 
-// ==================== SOCKET.IO ====================
+// ==================== SOCKET.IO EVENTS ====================
 const onlineUsers = new Map();
 
 io.on('connection', (socket) => {
@@ -110,27 +101,21 @@ io.on('connection', (socket) => {
 
   socket.on('authenticate', (userId) => {
     if (!userId) return;
-
     onlineUsers.set(String(userId), socket.id);
     socket.userId = String(userId);
-
-    console.log(`👤 Usuário autenticado: ${userId}`);
   });
 
   socket.on('joinConversation', (conversationId) => {
-    if (!conversationId) return;
-    socket.join(String(conversationId));
+    if (conversationId) socket.join(String(conversationId));
   });
 
   socket.on('leaveConversation', (conversationId) => {
-    if (!conversationId) return;
-    socket.leave(String(conversationId));
+    if (conversationId) socket.leave(String(conversationId));
   });
 
   socket.on('sendMessage', async (data) => {
     try {
       const { conversationId, senderId, receiverId, text } = data;
-
       if (!conversationId || !senderId || !receiverId || !text?.trim()) {
         return socket.emit('error', { message: 'Dados inválidos' });
       }
@@ -155,8 +140,6 @@ io.on('connection', (socket) => {
       if (receiverSocketId) {
         io.to(receiverSocketId).emit('newMessage', message);
       }
-
-      console.log(`💬 Mensagem enviada: ${conversationId}`);
     } catch (err) {
       console.error('❌ Erro ao enviar mensagem:', err);
       socket.emit('error', { message: 'Erro interno' });
@@ -164,27 +147,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    if (socket.userId) {
-      onlineUsers.delete(String(socket.userId));
-    }
-
+    if (socket.userId) onlineUsers.delete(String(socket.userId));
     console.log(`🔴 SOCKET DESCONECTADO: ${socket.id}`);
   });
 });
 
 // ==================== ERRO GLOBAL ====================
 app.use((err, req, res, next) => {
-  console.error('❌ Erro:', err);
-
-  res.status(500).json({
-    success: false,
-    message: 'Erro interno do servidor',
-  });
+  console.error('❌ Erro global:', err);
+  res.status(500).json({ success: false, message: 'Erro interno do servidor' });
 });
 
-// ==================== START ====================
+// ==================== START SERVER ====================
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(`🌐 API: https://jwmservice-tec-eletronic1.onrender.com`);
 });
-

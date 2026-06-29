@@ -4,12 +4,13 @@ const User = require('../models/User');
 const { protect } = require('../middleware/authMiddleware');
 
 // ======================================================
-// LISTAR PROFISSIONAIS
+// LISTAR TODOS OS PROFISSIONAIS
 // ======================================================
 router.get('/', async (req, res) => {
   try {
     const profs = await User.find({ role: 'profissional' })
       .select('name email servico especialidade phone descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial verificado premium isOnline location');
+
     res.json(profs);
   } catch (err) {
     console.error(err);
@@ -18,11 +19,12 @@ router.get('/', async (req, res) => {
 });
 
 // ======================================================
-// PROFISSIONAIS PRÓXIMOS
+// PROFISSIONAIS PRÓXIMOS (GEOLOCALIZAÇÃO)
 // ======================================================
 router.get('/proximos', async (req, res) => {
   try {
     const { latitude, longitude, raio = 50000 } = req.query;
+
     if (!latitude || !longitude) {
       return res.status(400).json({ message: 'Latitude e longitude são obrigatórios' });
     }
@@ -39,8 +41,8 @@ router.get('/proximos', async (req, res) => {
         }
       }
     })
-    .select('name servico especialidade foto city state avaliacaoMedia totalAvaliacoes precoInicial verificado premium isOnline location')
-    .limit(20);
+      .select('name servico especialidade foto city state avaliacaoMedia totalAvaliacoes precoInicial verificado premium isOnline location')
+      .limit(20);
 
     res.json(profissionais);
   } catch (err) {
@@ -50,7 +52,7 @@ router.get('/proximos', async (req, res) => {
 });
 
 // ======================================================
-// MEU PERFIL (PROTEGIDO) - Deve vir ANTES da rota :id
+// MEU PERFIL (PROTEGIDO) - DEVE VIR ANTES DA ROTA DINÂMICA :id
 // ======================================================
 router.get('/meu', protect, async (req, res) => {
   try {
@@ -73,7 +75,7 @@ router.get('/meu', protect, async (req, res) => {
 });
 
 // ======================================================
-// PROFISSIONAL POR ID (rota dinâmica - deve vir por último)
+// PERFIL PÚBLICO POR ID (ROTA DINÂMICA - DEVE SER A ÚLTIMA)
 // ======================================================
 router.get('/:id', async (req, res) => {
   try {
@@ -85,15 +87,16 @@ router.get('/:id', async (req, res) => {
     if (!profissional) {
       return res.status(404).json({ message: 'Profissional não encontrado' });
     }
+
     res.json(profissional);
   } catch (err) {
-    console.error(err);
+    console.error("Erro ao buscar profissional por ID:", err);
     res.status(500).json({ message: 'Erro ao buscar profissional' });
   }
 });
 
 // ======================================================
-// ATUALIZAR MEU PERFIL (SEGURADO)
+// ATUALIZAR MEU PERFIL
 // ======================================================
 router.put('/meu', protect, async (req, res) => {
   try {
@@ -119,15 +122,15 @@ router.put('/meu', protect, async (req, res) => {
       diasAtendimento: req.body.diasAtendimento,
       instagram: req.body.instagram,
       facebook: req.body.facebook,
-      site: req.body.site
+      site: req.body.site,
     };
 
-    if (req.body.latitude && req.body.longitude) {
-      allowedFields.location = {
-        type: 'Point',
-        coordinates: [parseFloat(req.body.longitude), parseFloat(req.body.latitude)]
-      };
-    }
+    // Remove campos undefined para evitar sobrescrever com null
+    Object.keys(allowedFields).forEach(key => {
+      if (allowedFields[key] === undefined) {
+        delete allowedFields[key];
+      }
+    });
 
     const user = await User.findOneAndUpdate(
       { _id: userId, role: 'profissional' },
@@ -144,7 +147,7 @@ router.put('/meu', protect, async (req, res) => {
       user
     });
   } catch (err) {
-    console.error(err);
+    console.error("Erro ao atualizar perfil:", err);
     res.status(500).json({ message: 'Erro ao atualizar perfil' });
   }
 });
