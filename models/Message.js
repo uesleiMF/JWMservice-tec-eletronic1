@@ -1,39 +1,177 @@
 const mongoose = require('mongoose');
 
-const MessageSchema = new mongoose.Schema({
-  conversationId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Conversation',
-    required: true,
-    index: true
-  },
+const MessageSchema = new mongoose.Schema(
+  {
+    // Conversa
+    conversationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Conversation',
+      required: true,
+      index: true,
+    },
 
-  orderId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Order',
-    default: null
-  },
+    // Pedido relacionado (opcional)
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Order',
+      default: null,
+    },
 
-  senderId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
+    // Remetente
+    senderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
 
-  receiverId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
+    // Destinatário
+    receiverId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
 
-  text: {
-    type: String,
-    required: true,
-    trim: true
+    // Tipo da mensagem
+    type: {
+      type: String,
+      enum: [
+        'text',
+        'image',
+        'file',
+        'audio',
+        'location',
+        'system'
+      ],
+      default: 'text',
+    },
+
+    // Texto
+    text: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+
+    // Anexo
+    attachment: {
+      url: {
+        type: String,
+        default: null,
+      },
+
+      fileName: {
+        type: String,
+        default: null,
+      },
+
+      fileType: {
+        type: String,
+        default: null,
+      },
+
+      fileSize: {
+        type: Number,
+        default: 0,
+      },
+    },
+
+    // Localização
+    location: {
+      latitude: Number,
+      longitude: Number,
+    },
+
+    // Mensagem lida
+    isRead: {
+      type: Boolean,
+      default: false,
+    },
+
+    readAt: {
+      type: Date,
+      default: null,
+    },
+
+    // Mensagem entregue
+    delivered: {
+      type: Boolean,
+      default: false,
+    },
+
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
+
+    // Editada
+    edited: {
+      type: Boolean,
+      default: false,
+    },
+
+    editedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // Excluída
+    deleted: {
+      type: Boolean,
+      default: false,
+    },
+
+    deletedAt: {
+      type: Date,
+      default: null,
+    }
+  },
+  {
+    timestamps: true,
   }
+);
 
-}, {
-  timestamps: true
+// ================= ÍNDICES =================
+
+MessageSchema.index({
+  conversationId: 1,
+  createdAt: 1,
 });
+
+MessageSchema.index({
+  senderId: 1,
+});
+
+MessageSchema.index({
+  receiverId: 1,
+});
+
+MessageSchema.index({
+  orderId: 1,
+});
+
+// ================= MÉTODOS =================
+
+MessageSchema.methods.markAsRead = function () {
+  this.isRead = true;
+  this.readAt = new Date();
+};
+
+MessageSchema.methods.markAsDelivered = function () {
+  this.delivered = true;
+  this.deliveredAt = new Date();
+};
+
+MessageSchema.methods.editMessage = function (newText) {
+  this.text = newText;
+  this.edited = true;
+  this.editedAt = new Date();
+};
+
+MessageSchema.methods.deleteMessage = function () {
+  this.deleted = true;
+  this.deletedAt = new Date();
+};
 
 module.exports = mongoose.model('Message', MessageSchema);
