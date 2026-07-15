@@ -29,11 +29,13 @@ const corsOptions = {
 
         if (!origin) return callback(null, true);
 
-        const allowedOrigins = [
-            'http://localhost:3000',
-            'http://127.0.0.1:3000',
-            'https://jw-mservice-tec-eletric2.vercel.app'
-        ];
+       const allowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://jw-mservice-tec-eletric2.vercel.app',
+    'https://jw-mservice-tec-eletric2-1qxtac5a6-uesleimfs-projects.vercel.app'  // adicione este
+
+];
 
         if (
             allowedOrigins.includes(origin) ||
