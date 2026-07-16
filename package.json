@@ -27,7 +27,7 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "leaflet": "^1.9.4",
-    "mercadopago": "^2.8.0",
+    "mercadopago": "^1.5.16",
     "mongoose": "^8.16.1",
     "multer": "^2.0.1",
     "nodemailer": "^7.0.3",
