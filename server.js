@@ -111,6 +111,7 @@ app.use('/api/orders', require('./routes/orders'));
 app.use('/api/chat', require('./routes/chatRoutes'));
 app.use('/api/conversations', require('./routes/conversationRoutes'));
 app.use('/api/reviews', require('./routes/reviewRoutes'));
+app.use('/api/payments', require('./routes/paymentRoutes'));
 
 
 // ==================== HEALTH ====================

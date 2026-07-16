@@ -2,95 +2,108 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const PortfolioSchema = new mongoose.Schema({
-  foto: String,
-  descricao: String,
-  createdAt: { type: Date, default: Date.now }
+    foto: String,
+    descricao: String,
+    createdAt: { type: Date, default: Date.now }
 }, { _id: false });
 
 const HorarioSchema = new mongoose.Schema({
-  dia: String,
-  inicio: String,
-  fim: String
+    dia: String,
+    inicio: String,
+    fim: String
 }, { _id: false });
 
 const CertificadoSchema = new mongoose.Schema({
-  titulo: String,
-  instituicao: String,
-  ano: Number
+    titulo: String,
+    instituicao: String,
+    ano: Number
 }, { _id: false });
 
 const UserSchema = new mongoose.Schema({
-  // DADOS BÁSICOS
-  name: { type: String, required: true, trim: true },
-  email: { 
-    type: String, 
-    required: true, 
-    unique: true, 
-    lowercase: true, 
-    trim: true 
-  },
-  passwordHash: { type: String, required: true },
+    // DADOS BÁSICOS
+    name: { type: String, required: true, trim: true },
+    email: {
+        type: String,
+        required: true,
+        unique: true,
+        lowercase: true,
+        trim: true
+    },
+    passwordHash: { type: String, required: true },
+    role: {
+        type: String,
+        enum: ['cliente', 'profissional'],
+        required: true,
+        index: true
+    },
 
-  role: { 
-    type: String, 
-    enum: ['cliente', 'profissional'], 
-    required: true,
-    index: true 
-  },
+    // DADOS DO PROFISSIONAL
+    phone: String,
+    servico: String,
+    especialidade: String,
+    especialidades: [{ type: String }],
+    descricao: String,
+    experiencia: { type: Number, default: 0 },
+    foto: String,
+    city: String,
+    state: String,
+    precoInicial: { type: Number, default: 0 },
+    raioAtendimento: { type: Number, default: 15 },
 
-  // DADOS DO PROFISSIONAL
-  phone: String,
-  servico: String,
-  especialidade: String,
-  especialidades: [{ type: String }],
-  descricao: String,
-  experiencia: { type: Number, default: 0 },
-  foto: String,
-  city: String,
-  state: String,
-  precoInicial: { type: Number, default: 0 },
-  raioAtendimento: { type: Number, default: 15 },
+    // AVALIAÇÕES
+    avaliacaoMedia: { type: Number, default: 0, min: 0, max: 5 },
+    totalAvaliacoes: { type: Number, default: 0 },
+    avaliacao: { type: Number, default: 0 },
 
-  // AVALIAÇÕES
-  avaliacaoMedia: { type: Number, default: 0, min: 0, max: 5 },
-  totalAvaliacoes: { type: Number, default: 0 },
-  avaliacao: { type: Number, default: 0 }, // compatibilidade
+    // PORTFÓLIO, HORÁRIOS, ETC.
+    portfolio: [PortfolioSchema],
+    horarios: [HorarioSchema],
+    diasAtendimento: [{ type: String }],
 
-  // PORTFÓLIO, HORÁRIOS, ETC.
-  portfolio: [PortfolioSchema],
-  horarios: [HorarioSchema],
-  diasAtendimento: [{ type: String }],
+    // ESTATÍSTICAS
+    servicosConcluidos: { type: Number, default: 0 },
+    tempoResposta: { type: Number, default: 0 },
+    visualizacoes: { type: Number, default: 0 },
+    favoritos: { type: Number, default: 0 },
 
-  // ESTATÍSTICAS
-  servicosConcluidos: { type: Number, default: 0 },
-  tempoResposta: { type: Number, default: 0 },
-  visualizacoes: { type: Number, default: 0 },
-  favoritos: { type: Number, default: 0 },
+    // SELOS
+    verificado: { type: Boolean, default: false },
+    premium: { type: Boolean, default: false },
 
-  // SELOS
-  verificado: { type: Boolean, default: false },
-  premium: { type: Boolean, default: false },
+    // REDES SOCIAIS
+    instagram: String,
+    facebook: String,
+    site: String,
 
-  // REDES SOCIAIS
-  instagram: String,
-  facebook: String,
-  site: String,
+    // CERTIFICADOS
+    certificados: [CertificadoSchema],
 
-  // CERTIFICADOS
-  certificados: [CertificadoSchema],
+    // GEOLOCALIZAÇÃO
+    latitude: Number,
+    longitude: Number,
+    location: {
+        type: { type: String, enum: ['Point'] },
+        coordinates: { type: [Number] }
+    },
 
-  // GEOLOCALIZAÇÃO
-  latitude: Number,
-  longitude: Number,
-  location: {
-    type: { type: String, enum: ['Point'] },
-    coordinates: { type: [Number] }
-  },
+    // === CAMPOS NOVOS PARA PAGAMENTO ===
+    status: {
+        type: String,
+        enum: ['pendente', 'ativo', 'bloqueado'],
+        default: 'pendente'
+    },
+    paymentStatus: {
+        type: String,
+        enum: ['não_pago', 'pendente', 'pago', 'falhou'],
+        default: 'não_pago'
+    },
+    paymentPreferenceId: String,
+    registrationFeePaidAt: Date,
 
-  // STATUS
-  isOnline: { type: Boolean, default: false }
+    // STATUS
+    isOnline: { type: Boolean, default: false }
 }, {
-  timestamps: true
+    timestamps: true
 });
 
 // Índices
@@ -101,12 +114,12 @@ UserSchema.index({ city: 1, state: 1 });
 
 // ====================== MÉTODOS DE SENHA ======================
 UserSchema.methods.setPassword = async function(password) {
-  if (!password) throw new Error('Senha é obrigatória');
-  this.passwordHash = await bcrypt.hash(password, 10);
+    if (!password) throw new Error('Senha é obrigatória');
+    this.passwordHash = await bcrypt.hash(password, 10);
 };
 
 UserSchema.methods.validatePassword = async function(password) {
-  return bcrypt.compare(password, this.passwordHash);
+    return bcrypt.compare(password, this.passwordHash);
 };
 
 module.exports = mongoose.model('User', UserSchema);
