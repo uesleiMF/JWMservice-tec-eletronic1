@@ -1,52 +1,51 @@
+// routes/paymentRoutes.js
 const express = require('express');
 const router = express.Router();
+const { Payment } = require('mercadopago');
+const mpClient = require('../config/mercadopago');
 const User = require('../models/User');
-const mercadopago = require('../config/mercadopago');
 
-// ================= WEBHOOK MERCADO PAGO =================
-router.post('/webhook', async (req, res) => {
-    try {
-        const { type, data } = req.body;
+// ==================== CRIAR PAGAMENTO PIX ====================
+router.post('/create-pix', async (req, res) => {
+  try {
+    const { userId, amount = 49.90, description = 'Taxa de cadastro profissional' } = req.body;
 
-        console.log('📨 Webhook recebido:', type, data);
-
-        // Processa apenas notificações de pagamento
-        if (type === 'payment' && data?.id) {
-            const paymentId = data.id;
-
-            // Busca os detalhes do pagamento
-            const payment = await mercadopago.payment.findById(paymentId);
-
-            if (payment && payment.body.status === 'approved') {
-                const profissionalId = payment.body.external_reference;
-
-                // Atualiza o usuário
-                const user = await User.findByIdAndUpdate(
-                    profissionalId,
-                    {
-                        status: 'ativo',
-                        paymentStatus: 'pago',
-                        registrationFeePaidAt: new Date(),
-                        verificado: true // opcional: marca como verificado
-                    },
-                    { new: true }
-                );
-
-                if (user) {
-                    console.log(`✅ Pagamento aprovado para profissional: ${user.name} (${user._id})`);
-                    
-                    // Aqui você pode emitir um evento via Socket.IO se quiser notificar o usuário em tempo real
-                }
-            }
-        }
-
-        // Sempre responde com 200 para o Mercado Pago não reenviar
-        res.sendStatus(200);
-
-    } catch (error) {
-        console.error('Erro no webhook:', error);
-        res.sendStatus(200); // Mesmo com erro, responder 200
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'ID do usuário é obrigatório' });
     }
+
+    const paymentService = new Payment(mpClient);
+
+    const paymentData = {
+      transaction_amount: parseFloat(amount),
+      description: description,
+      payment_method_id: 'pix',
+      external_reference: userId.toString(),   // Importante para o webhook
+      payer: {
+        email: req.body.email || 'cliente@email.com',
+        first_name: req.body.name || 'Profissional',
+      },
+    };
+
+    const payment = await paymentService.create(paymentData);
+
+    res.json({
+      success: true,
+      payment,
+      pix: {
+        qr_code: payment.point_of_interaction.transaction_data.qr_code,
+        qr_code_base64: payment.point_of_interaction.transaction_data.qr_code_base64,
+        expiration_date: payment.date_of_expiration
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro ao criar PIX:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao gerar pagamento PIX'
+    });
+  }
 });
 
 module.exports = router;
