@@ -46,7 +46,6 @@ router.post('/register', async (req, res) => {
       paymentStatus: role === 'profissional' ? 'não_pago' : 'não_pago'
     };
 
-    // Geolocalização
     if (latitude && longitude) {
       userData.location = {
         type: 'Point',
@@ -61,27 +60,46 @@ router.post('/register', async (req, res) => {
     // ================= PAGAMENTO PARA PROFISSIONAL =================
     let paymentLink = null;
     if (role === 'profissional') {
-      const preference = {
-        items: [{
-          title: 'Cadastro de Profissional - JW Service',
-          unit_price: 14.99,
-          quantity: 1,
-          currency_id: 'BRL'
-        }],
-        payer: { email: email },
-        external_reference: user._id.toString(),
-        back_urls: {
-          success: `${process.env.FRONTEND_URL}/profissional/sucesso-pagamento`,
-          failure: `${process.env.FRONTEND_URL}/profissional/falha-pagamento`,
-        },
-        auto_return: 'approved',
-        notification_url: `${process.env.BACKEND_URL}/api/webhook/mp`, // ← Corrigido
-      };
+      console.log('🎯 Iniciando fluxo de pagamento para profissional:', email);
 
-      const response = await mercadopago.preferences.create(preference);
-      user.paymentPreferenceId = response.body.id;
-      await user.save();
-      paymentLink = response.body.init_point;
+      if (!process.env.MP_ACCESS_TOKEN) {
+        console.error('❌ MP_ACCESS_TOKEN não configurado!');
+      }
+
+      try {
+        const preference = {
+          items: [{
+            title: 'Cadastro de Profissional - JW Service',
+            unit_price: 14.99,
+            quantity: 1,
+            currency_id: 'BRL'
+          }],
+          payer: { email },
+          external_reference: user._id.toString(),
+          back_urls: {
+            success: `${process.env.FRONTEND_URL}/profissional/sucesso-pagamento`,
+            failure: `${process.env.FRONTEND_URL}/profissional/falha-pagamento`,
+          },
+          auto_return: 'approved',
+          notification_url: `${process.env.BACKEND_URL}/api/webhook/mp`,
+        };
+
+        console.log('📤 Enviando requisição para Mercado Pago...');
+        const response = await mercadopago.preferences.create(preference);
+
+        console.log('✅ SUCCESS! Preference criada.');
+        console.log('🔗 Link de pagamento:', response.body.init_point);
+
+        user.paymentPreferenceId = response.body.id;
+        await user.save();
+
+        paymentLink = response.body.init_point;
+
+      } catch (mpError) {
+        console.error('❌ ERRO AO CRIAR PAGAMENTO MP:');
+        console.error(mpError.response?.data || mpError.message || mpError);
+        paymentLink = null;
+      }
     }
 
     const token = jwt.sign(
@@ -132,7 +150,6 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Senha incorreta' });
     }
 
-    // Bloqueia login se profissional não pagou
     if (user.role === 'profissional' && user.paymentStatus !== 'pago') {
       return res.status(403).json({
         message: 'Sua conta está pendente de pagamento. Complete o pagamento para acessar.'
