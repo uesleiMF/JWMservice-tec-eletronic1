@@ -19,10 +19,10 @@ router.post('/register', async (req, res) => {
       longitude
     } = req.body;
 
+    console.log('📥 [REGISTER] Dados recebidos:', { role, email, name: name?.substring(0, 20) });
+
     if (!name || !email || !password || !role) {
-      return res.status(400).json({
-        message: 'Nome, email, senha e role são obrigatórios'
-      });
+      return res.status(400).json({ message: 'Nome, email, senha e role são obrigatórios' });
     }
 
     if (!['cliente', 'profissional'].includes(role)) {
@@ -57,14 +57,12 @@ router.post('/register', async (req, res) => {
     await user.setPassword(password);
     await user.save();
 
+    console.log('👤 Usuário salvo com sucesso. Role:', role);
+
     // ================= PAGAMENTO PARA PROFISSIONAL =================
     let paymentLink = null;
     if (role === 'profissional') {
-      console.log('🎯 Iniciando fluxo de pagamento para profissional:', email);
-
-      if (!process.env.MP_ACCESS_TOKEN) {
-        console.error('❌ MP_ACCESS_TOKEN não configurado!');
-      }
+      console.log('🎯 Iniciando criação de preference MP para:', email);
 
       try {
         const preference = {
@@ -74,7 +72,7 @@ router.post('/register', async (req, res) => {
             quantity: 1,
             currency_id: 'BRL'
           }],
-          payer: { email },
+          payer: { email: email },
           external_reference: user._id.toString(),
           back_urls: {
             success: `${process.env.FRONTEND_URL}/profissional/sucesso-pagamento`,
@@ -84,11 +82,11 @@ router.post('/register', async (req, res) => {
           notification_url: `${process.env.BACKEND_URL}/api/webhook/mp`,
         };
 
-        console.log('📤 Enviando requisição para Mercado Pago...');
+        console.log('📤 Chamando mercadopago.preferences.create...');
         const response = await mercadopago.preferences.create(preference);
 
-        console.log('✅ SUCCESS! Preference criada.');
-        console.log('🔗 Link de pagamento:', response.body.init_point);
+        console.log('✅ Preference criada com sucesso!');
+        console.log('🔗 Link:', response.body.init_point);
 
         user.paymentPreferenceId = response.body.id;
         await user.save();
@@ -96,9 +94,9 @@ router.post('/register', async (req, res) => {
         paymentLink = response.body.init_point;
 
       } catch (mpError) {
-        console.error('❌ ERRO AO CRIAR PAGAMENTO MP:');
+        console.error('❌ ERRO Mercado Pago:');
         console.error(mpError.response?.data || mpError.message || mpError);
-        paymentLink = null;
+        // Continua mesmo com erro no pagamento
       }
     }
 
@@ -127,7 +125,7 @@ router.post('/register', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('ERRO REGISTER:', err);
+    console.error('ERRO REGISTER GERAL:', err);
     res.status(500).json({ message: 'Erro no registro' });
   }
 });
@@ -180,7 +178,6 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// ================= ME =================
 router.get('/me', protect, async (req, res) => {
   res.json({ user: req.user });
 });
