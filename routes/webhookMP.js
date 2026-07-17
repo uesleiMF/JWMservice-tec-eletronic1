@@ -9,17 +9,15 @@ const mpClient = require('../config/mercadopago');
 router.post('/webhook', async (req, res) => {
   try {
     const { type, data } = req.body;
+    
+    console.log('📨 Webhook Mercado Pago recebido:', { type, data });
 
-    console.log('📨 Webhook Mercado Pago recebido:', type, data);
-
-    // Processa apenas notificações de pagamento
     if (type === 'payment' && data?.id) {
       const paymentId = data.id;
-
       const paymentService = new Payment(mpClient);
       const payment = await paymentService.get({ id: paymentId });
 
-      console.log('🔍 Status do pagamento:', payment.status);
+      console.log(`🔍 Pagamento ${paymentId} - Status: ${payment.status}`);
 
       if (payment.status === 'approved') {
         const profissionalId = payment.external_reference;
@@ -31,25 +29,28 @@ router.post('/webhook', async (req, res) => {
               status: 'ativo',
               paymentStatus: 'pago',
               registrationFeePaidAt: new Date(),
-              verificado: true
+              verificado: true,
+              paymentId: paymentId
             },
             { new: true }
           );
 
           if (user) {
-            console.log(`✅ Pagamento aprovado para: ${user.name} (${user._id})`);
+            console.log(`✅ Profissional ativado: ${user.name} (${user._id})`);
           } else {
-            console.log(`⚠️ Usuário ${profissionalId} não encontrado`);
+            console.warn(`⚠️ Usuário ${profissionalId} não encontrado`);
           }
         }
+      } 
+      else if (payment.status === 'rejected' || payment.status === 'cancelled') {
+        console.log(`❌ Pagamento ${paymentId} foi ${payment.status}`);
       }
     }
 
-    // SEMPRE responder 200 o mais rápido possível
     res.sendStatus(200);
   } catch (error) {
     console.error('❌ Erro no webhook Mercado Pago:', error);
-    res.sendStatus(200); // Nunca retornar erro para o Mercado Pago
+    res.sendStatus(200);
   }
 });
 
