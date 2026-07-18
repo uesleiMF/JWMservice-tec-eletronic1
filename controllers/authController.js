@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 
-// Função auxiliar para gerar token
+// ====================== GERAR TOKEN ======================
 const generateToken = (id) => {
   return jwt.sign(
     { id },
@@ -32,61 +32,64 @@ exports.register = async (req, res) => {
       longitude
     } = req.body;
 
-    // Validação básica
     if (!name || !email || !password || !phone || !role) {
       return res.status(400).json({
-        message: 'Nome, email, senha, telefone e role são obrigatórios.'
+        message: 'Nome, email, senha, telefone e perfil são obrigatórios.'
       });
     }
 
     if (!['cliente', 'profissional'].includes(role)) {
-      return res.status(400).json({ message: 'Role inválido.' });
+      return res.status(400).json({
+        message: 'Tipo de usuário inválido.'
+      });
     }
 
-    // Verifica se email já existe
-    const emailExists = await User.findOne({ email: email.toLowerCase() });
+    const emailExists = await User.findOne({
+      email: email.toLowerCase()
+    });
+
     if (emailExists) {
-      return res.status(400).json({ message: 'Este e-mail já está cadastrado.' });
+      return res.status(400).json({
+        message: 'Este e-mail já está cadastrado.'
+      });
     }
 
-    // Prepara os dados
-    const userData = {
+    const user = new User({
       name: name.trim(),
       email: email.toLowerCase().trim(),
-      phone: phone.trim(),
+      phone,
       role,
       servico: role === 'profissional' ? servico : undefined,
       especialidade: role === 'profissional' ? especialidade : undefined,
       descricao: role === 'profissional' ? descricao : undefined,
-      experiencia: role === 'profissional' ? Number(experiencia || 0) : undefined,
+      experiencia: role === 'profissional'
+        ? Number(experiencia || 0)
+        : undefined,
       city,
       state,
       precoInicial: Number(precoInicial || 0),
       latitude: latitude ? Number(latitude) : undefined,
-      longitude: longitude ? Number(longitude) : undefined,
-    };
+      longitude: longitude ? Number(longitude) : undefined
+    });
 
-    // Geolocalização (importante para 2dsphere)
     if (latitude && longitude) {
-      userData.location = {
+      user.location = {
         type: 'Point',
-        coordinates: [Number(longitude), Number(latitude)] // [lng, lat]
+        coordinates: [
+          Number(longitude),
+          Number(latitude)
+        ]
       };
     }
 
-    const user = new User(userData);
-
-    // Define a senha (hash)
     await user.setPassword(password);
 
-    // Salva no banco
     await user.save();
 
-    // Gera token
     const token = generateToken(user._id);
 
-    res.status(201).json({
-      message: 'Usuário cadastrado com sucesso!',
+    return res.status(201).json({
+      message: 'Usuário cadastrado com sucesso.',
       token,
       user: {
         _id: user._id,
@@ -95,18 +98,23 @@ exports.register = async (req, res) => {
         phone: user.phone,
         role: user.role,
         servico: user.servico,
+        especialidade: user.especialidade,
         city: user.city,
         state: user.state,
         latitude: user.latitude,
         longitude: user.longitude,
         avaliacaoMedia: user.avaliacaoMedia,
         verificado: user.verificado,
-        premium: user.premium
+        premium: user.premium,
+        paymentStatus: user.paymentStatus,
+        status: user.status,
+        isOnline: user.isOnline
       }
     });
 
   } catch (err) {
     console.error('ERRO REGISTER:', err);
+
     res.status(500).json({
       message: 'Erro ao cadastrar usuário.',
       error: err.message
@@ -117,25 +125,50 @@ exports.register = async (req, res) => {
 // ====================== LOGIN ======================
 exports.login = async (req, res) => {
   try {
+
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: 'Informe email e senha.' });
+      return res.status(400).json({
+        message: 'Informe email e senha.'
+      });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({
+      email: email.toLowerCase()
+    });
+
     if (!user) {
-      return res.status(400).json({ message: 'Usuário não encontrado.' });
+      return res.status(400).json({
+        message: 'Usuário não encontrado.'
+      });
     }
 
-    const isMatch = await user.validatePassword(password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Senha inválida.' });
+    const validPassword = await user.validatePassword(password);
+
+    if (!validPassword) {
+      return res.status(400).json({
+        message: 'Senha inválida.'
+      });
     }
+
+    // Bloqueia somente profissionais bloqueados
+    if (
+      user.role === 'profissional' &&
+      user.status === 'bloqueado'
+    ) {
+      return res.status(403).json({
+        message:
+          'Sua conta está bloqueada. Entre em contato com o suporte.'
+      });
+    }
+
+    user.isOnline = true;
+    await user.save();
 
     const token = generateToken(user._id);
 
-    res.json({
+    return res.json({
       token,
       user: {
         _id: user._id,
@@ -144,6 +177,7 @@ exports.login = async (req, res) => {
         phone: user.phone,
         role: user.role,
         servico: user.servico,
+        especialidade: user.especialidade,
         city: user.city,
         state: user.state,
         latitude: user.latitude,
@@ -151,14 +185,46 @@ exports.login = async (req, res) => {
         avaliacaoMedia: user.avaliacaoMedia,
         verificado: user.verificado,
         premium: user.premium,
-        isOnline: user.isOnline
+        paymentStatus: user.paymentStatus,
+        status: user.status,
+        isOnline: true
       }
     });
 
   } catch (err) {
     console.error('ERRO LOGIN:', err);
-    res.status(500).json({ message: 'Erro interno do servidor.' });
+
+    res.status(500).json({
+      message: 'Erro interno do servidor.'
+    });
   }
 };
 
-module.exports = { register: exports.register, login: exports.login };
+// ====================== LOGOUT ======================
+exports.logout = async (req, res) => {
+  try {
+
+    if (req.user) {
+      await User.findByIdAndUpdate(req.user.id, {
+        isOnline: false
+      });
+    }
+
+    res.json({
+      message: 'Logout realizado com sucesso.'
+    });
+
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      message: 'Erro ao realizar logout.'
+    });
+  }
+};
+
+module.exports = {
+  register: exports.register,
+  login: exports.login,
+  logout: exports.logout
+};
