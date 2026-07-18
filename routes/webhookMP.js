@@ -1,28 +1,41 @@
 // routes/webhookMP.js
 const express = require('express');
 const router = express.Router();
+
+const mercadopago = require('../config/mercadopago');
 const User = require('../models/User');
-const { Payment } = require('mercadopago');
-const mpClient = require('../config/mercadopago');
+
 
 // ================= WEBHOOK MERCADO PAGO =================
 router.post('/webhook', async (req, res) => {
   try {
     const { type, data } = req.body;
-    
-    console.log('📨 Webhook Mercado Pago recebido:', { type, data });
+
+    console.log('📨 Webhook Mercado Pago recebido:', {
+      type,
+      data
+    });
 
     if (type === 'payment' && data?.id) {
-      const paymentId = data.id;
-      const paymentService = new Payment(mpClient);
-      const payment = await paymentService.get({ id: paymentId });
 
-      console.log(`🔍 Pagamento ${paymentId} - Status: ${payment.status}`);
+      const paymentId = data.id;
+
+      const response = await mercadopago.payment.get(paymentId);
+
+      const payment = response.body;
+
+      console.log(
+        `🔍 Pagamento ${paymentId} - Status: ${payment.status}`
+      );
+
 
       if (payment.status === 'approved') {
+
         const profissionalId = payment.external_reference;
 
+
         if (profissionalId) {
+
           const user = await User.findByIdAndUpdate(
             profissionalId,
             {
@@ -32,26 +45,49 @@ router.post('/webhook', async (req, res) => {
               verificado: true,
               paymentId: paymentId
             },
-            { new: true }
+            {
+              new: true
+            }
           );
 
+
           if (user) {
-            console.log(`✅ Profissional ativado: ${user.name} (${user._id})`);
+            console.log(
+              `✅ Profissional ativado: ${user.name}`
+            );
           } else {
-            console.warn(`⚠️ Usuário ${profissionalId} não encontrado`);
+            console.warn(
+              `⚠️ Usuário não encontrado: ${profissionalId}`
+            );
           }
+
         }
-      } 
-      else if (payment.status === 'rejected' || payment.status === 'cancelled') {
-        console.log(`❌ Pagamento ${paymentId} foi ${payment.status}`);
+      }
+
+      if (
+        payment.status === 'rejected' ||
+        payment.status === 'cancelled'
+      ) {
+        console.log(
+          `❌ Pagamento ${paymentId}: ${payment.status}`
+        );
       }
     }
 
+
     res.sendStatus(200);
+
+
   } catch (error) {
-    console.error('❌ Erro no webhook Mercado Pago:', error);
+
+    console.error(
+      '❌ Erro webhook Mercado Pago:',
+      error.response?.body || error.message
+    );
+
     res.sendStatus(200);
   }
 });
+
 
 module.exports = router;

@@ -41,29 +41,30 @@ router.post('/create-pix', async (req, res) => {
 
     const payment = response.body;
 
+    const pixData =
+      payment.point_of_interaction.transaction_data;
+
     res.json({
       success: true,
-      payment,
+      paymentId: payment.id,
       pix: {
-        qr_code:
-          payment.point_of_interaction.transaction_data.qr_code,
-        qr_code_base64:
-          payment.point_of_interaction.transaction_data.qr_code_base64,
+        qr_code: pixData.qr_code,
+        qr_code_base64: pixData.qr_code_base64,
         expiration_date: payment.date_of_expiration
       }
     });
 
   } catch (err) {
 
-    console.error('Erro Mercado Pago');
-
-    console.error(err.response?.body || err.message);
+    console.error(
+      'Erro Mercado Pago:',
+      err.response?.body || err.message
+    );
 
     res.status(500).json({
       success: false,
-      message: err.message
+      message: 'Erro ao criar PIX'
     });
-
   }
 });
 

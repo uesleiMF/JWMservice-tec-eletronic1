@@ -64,6 +64,7 @@ app.use('/api/chat', require('./routes/chatRoutes'));
 app.use('/api/conversations', require('./routes/conversationRoutes'));
 app.use('/api/reviews', require('./routes/reviewRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
+app.use('/api/mercadopago', require('./routes/mercadopagoRoutes'));
 
 // ==================== MERCADO PAGO WEBHOOK ====================
 app.use('/api/webhook/mp', require('./routes/webhookMP'));

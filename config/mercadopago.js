@@ -1,21 +1,13 @@
 const mercadopago = require('mercadopago');
 
-const configureMercadoPago = () => {
-  if (!process.env.MP_ACCESS_TOKEN) {
-    console.error('❌ MP_ACCESS_TOKEN não encontrado no .env');
-    return null;
-  }
+if (!process.env.MP_ACCESS_TOKEN) {
+  throw new Error('MP_ACCESS_TOKEN não encontrado.');
+}
 
-  mercadopago.configure({
-    access_token: process.env.MP_ACCESS_TOKEN,
-    sandbox: true   // ← Ativado para testes (mude para false em produção)
-  });
+mercadopago.configure({
+  access_token: process.env.MP_ACCESS_TOKEN
+});
 
-  console.log('✅ Mercado Pago configurado com sucesso (Sandbox)');
-  return mercadopago;
-};
+console.log('✅ Mercado Pago configurado com sucesso');
 
-const mp = configureMercadoPago();
-
-module.exports = mp;
-module.exports.mercadopago = mercadopago;
+module.exports = mercadopago;
