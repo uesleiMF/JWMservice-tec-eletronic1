@@ -1,150 +1,476 @@
 const express = require('express');
 const router = express.Router();
+
 const User = require('../models/User');
 const { protect } = require('../middleware/authMiddleware');
 
+
 // ======================================================
-// LISTAR TODOS OS PROFISSIONAIS (só ativos E pagos)
+// LISTAR TODOS OS PROFISSIONAIS ATIVOS E PAGOS
+// ======================================================
 router.get('/', async (req, res) => {
+
   try {
+
     const profs = await User.find({
       role: 'profissional',
       status: 'ativo',
-      paymentStatus: 'pago'           // ← Adicionado
+      paymentStatus: 'pago'
     })
-    .select('name email servico especialidade phone descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial verificado premium isOnline location')
-    .sort({ premium: -1, avaliacaoMedia: -1 }); // Premium primeiro, depois melhor avaliados
+    .select(
+      'name email servico especialidade phone descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial verificado premium isOnline location'
+    )
+    .sort({
+      premium: -1,
+      avaliacaoMedia: -1
+    });
+
 
     res.json(profs);
+
+
   } catch (err) {
+
     console.error(err);
-    res.status(500).json({ message: 'Erro ao buscar profissionais' });
+
+    res.status(500).json({
+      message: 'Erro ao buscar profissionais'
+    });
+
   }
+
 });
 
+
+
 // ======================================================
-// PROFISSIONAIS PRÓXIMOS (GEOLOCALIZAÇÃO)
+// PROFISSIONAIS PRÓXIMOS
+// ======================================================
 router.get('/proximos', async (req, res) => {
+
   try {
-    const { latitude, longitude, raio = 50000 } = req.query;
+
+    const {
+      latitude,
+      longitude,
+      raio = 50000
+    } = req.query;
+
+
     if (!latitude || !longitude) {
-      return res.status(400).json({ message: 'Latitude e longitude são obrigatórios' });
+
+      return res.status(400).json({
+        message: 'Latitude e longitude são obrigatórios'
+      });
+
     }
 
-    const lat = parseFloat(latitude);
-    const lon = parseFloat(longitude);
+
+    const lat = Number(latitude);
+    const lon = Number(longitude);
+
 
     const profissionais = await User.find({
+
       role: 'profissional',
+
       status: 'ativo',
-      paymentStatus: 'pago',           // ← Adicionado
+
+      paymentStatus: 'pago',
+
       location: {
+
         $near: {
-          $geometry: { type: 'Point', coordinates: [lon, lat] },
-          $maxDistance: parseInt(raio)
+
+          $geometry: {
+
+            type: 'Point',
+
+            coordinates: [
+              lon,
+              lat
+            ]
+
+          },
+
+          $maxDistance: Number(raio)
+
         }
+
       }
+
     })
-    .select('name servico especialidade foto city state avaliacaoMedia totalAvaliacoes precoInicial verificado premium isOnline location')
+    .select(
+      'name servico especialidade foto city state avaliacaoMedia totalAvaliacoes precoInicial verificado premium isOnline location'
+    )
     .limit(20);
 
+
+
     res.json(profissionais);
+
+
+
   } catch (err) {
+
     console.error(err);
-    res.status(500).json({ message: 'Erro ao buscar profissionais próximos' });
-  }
-});
 
-// ======================================================
-// MEU PERFIL (PROTEGIDO)
-router.get('/meu', protect, async (req, res) => {
-  try {
-    if (!req.user?._id) {
-      return res.status(401).json({ message: 'Não autenticado' });
-    }
-    const user = await User.findById(req.user._id)
-      .select('name email phone servico especialidade descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial portfolio horarios diasAtendimento latitude longitude role status paymentStatus');
-
-    if (!user) {
-      return res.status(404).json({ message: 'Perfil não encontrado' });
-    }
-    res.json(user);
-  } catch (err) {
-    console.error("Erro na rota /meu:", err);
-    res.status(500).json({ message: 'Erro ao buscar perfil' });
-  }
-});
-
-// ======================================================
-// PERFIL PÚBLICO POR ID
-router.get('/:id', async (req, res) => {
-  try {
-    const profissional = await User.findOne({
-      _id: req.params.id,
-      role: 'profissional',
-      status: 'ativo',
-      paymentStatus: 'pago'        // ← Adicionado
-    }).select('name email servico especialidade phone descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial portfolio horarios diasAtendimento raioAtendimento verificado premium servicosConcluidos favoritos visualizacoes instagram facebook site location');
-
-    if (!profissional) {
-      return res.status(404).json({ message: 'Profissional não encontrado ou inativo' });
-    }
-    res.json(profissional);
-  } catch (err) {
-    console.error("Erro ao buscar profissional por ID:", err);
-    res.status(500).json({ message: 'Erro ao buscar profissional' });
-  }
-});
-
-// ======================================================
-// ATUALIZAR MEU PERFIL (mantido igual)
-router.put('/meu', protect, async (req, res) => {
-  try {
-    if (!req.user?._id) {
-      return res.status(401).json({ message: 'Não autenticado' });
-    }
-    const userId = req.user._id;
-    const allowedFields = {
-      name: req.body.name,
-      phone: req.body.phone,
-      servico: req.body.servico,
-      especialidade: req.body.especialidade,
-      descricao: req.body.descricao,
-      experiencia: req.body.experiencia,
-      city: req.body.city,
-      state: req.body.state,
-      foto: req.body.foto,
-      precoInicial: req.body.precoInicial,
-      raioAtendimento: req.body.raioAtendimento,
-      horarios: req.body.horarios,
-      diasAtendimento: req.body.diasAtendimento,
-      instagram: req.body.instagram,
-      facebook: req.body.facebook,
-      site: req.body.site,
-    };
-
-    Object.keys(allowedFields).forEach(key => {
-      if (allowedFields[key] === undefined) delete allowedFields[key];
+    res.status(500).json({
+      message: 'Erro ao buscar profissionais próximos'
     });
 
-    const user = await User.findOneAndUpdate(
-      { _id: userId, role: 'profissional' },
-      { $set: allowedFields },
-      { new: true, runValidators: true }
+  }
+
+});
+
+
+
+
+// ======================================================
+// MEU PERFIL
+// ======================================================
+router.get('/meu', protect, async (req, res) => {
+
+  try {
+
+
+    if (!req.user?._id) {
+
+      return res.status(401).json({
+        message: 'Não autenticado'
+      });
+
+    }
+
+
+
+    const user = await User.findById(req.user._id)
+      .select(
+        'name email phone servico especialidade descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial portfolio horarios diasAtendimento latitude longitude role status paymentStatus'
+      );
+
+
+
+    if (!user) {
+
+      return res.status(404).json({
+        message: 'Perfil não encontrado'
+      });
+
+    }
+
+
+    res.json(user);
+
+
+
+  } catch (err) {
+
+    console.error(
+      'Erro na rota /meu:',
+      err
     );
 
-    if (!user) {
-      return res.status(404).json({ message: 'Usuário não encontrado' });
+
+    res.status(500).json({
+      message: 'Erro ao buscar perfil'
+    });
+
+  }
+
+});
+
+
+
+
+// ======================================================
+// PERFIL PÚBLICO
+// ======================================================
+router.get('/:id', async (req, res) => {
+
+  try {
+
+
+    const profissional = await User.findOne({
+
+      _id: req.params.id,
+
+      role: 'profissional',
+
+      status: 'ativo',
+
+      paymentStatus: 'pago'
+
+    })
+    .select(
+      'name email servico especialidade phone descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial portfolio horarios diasAtendimento raioAtendimento verificado premium servicosConcluidos favoritos visualizacoes instagram facebook site location'
+    );
+
+
+
+    if (!profissional) {
+
+      return res.status(404).json({
+
+        message:
+        'Profissional não encontrado ou inativo'
+
+      });
+
     }
 
-    res.json({
-      message: 'Perfil atualizado com sucesso!',
-      user
-    });
+
+    res.json(profissional);
+
+
+
   } catch (err) {
-    console.error("Erro ao atualizar perfil:", err);
-    res.status(500).json({ message: 'Erro ao atualizar perfil' });
+
+    console.error(
+      'Erro ao buscar profissional:',
+      err
+    );
+
+
+    res.status(500).json({
+
+      message:
+      'Erro ao buscar profissional'
+
+    });
+
   }
+
 });
+
+
+
+
+
+// ======================================================
+// ATUALIZAR MEU PERFIL
+// ======================================================
+router.put('/meu', protect, async (req, res) => {
+
+  try {
+
+
+    const allowedFields = {
+
+      name: req.body.name,
+
+      phone: req.body.phone,
+
+      servico: req.body.servico,
+
+      especialidade: req.body.especialidade,
+
+      descricao: req.body.descricao,
+
+      experiencia: req.body.experiencia,
+
+      city: req.body.city,
+
+      state: req.body.state,
+
+      foto: req.body.foto,
+
+      precoInicial: req.body.precoInicial,
+
+      raioAtendimento: req.body.raioAtendimento,
+
+      horarios: req.body.horarios,
+
+      diasAtendimento: req.body.diasAtendimento,
+
+      instagram: req.body.instagram,
+
+      facebook: req.body.facebook,
+
+      site: req.body.site
+
+    };
+
+
+
+    Object.keys(allowedFields)
+      .forEach(key => {
+
+        if (allowedFields[key] === undefined) {
+
+          delete allowedFields[key];
+
+        }
+
+      });
+
+
+
+    const user = await User.findOneAndUpdate(
+
+      {
+        _id: req.user._id,
+        role: 'profissional'
+      },
+
+      {
+        $set: allowedFields
+      },
+
+      {
+        new:true,
+        runValidators:true
+      }
+
+    );
+
+
+
+    if (!user) {
+
+      return res.status(404).json({
+
+        message:'Usuário não encontrado'
+
+      });
+
+    }
+
+
+
+    res.json({
+
+      message:
+      'Perfil atualizado com sucesso!',
+
+      user
+
+    });
+
+
+
+  } catch(err) {
+
+
+    console.error(err);
+
+
+    res.status(500).json({
+
+      message:
+      'Erro ao atualizar perfil'
+
+    });
+
+
+  }
+
+});
+
+
+
+
+
+
+// ======================================================
+// CONFIRMAR PAGAMENTO PROFISSIONAL
+// MODO TESTE
+// ======================================================
+router.put('/:id/pagamento', async (req,res)=>{
+
+
+  try {
+
+
+    const profissional =
+      await User.findOneAndUpdate(
+
+        {
+
+          _id:req.params.id,
+
+          role:'profissional'
+
+        },
+
+
+        {
+
+          status:'ativo',
+
+          paymentStatus:'pago',
+
+          verificado:true,
+
+          registrationFeePaidAt:new Date()
+
+        },
+
+
+        {
+
+          new:true
+
+        }
+
+      );
+
+
+
+    if(!profissional){
+
+
+      return res.status(404).json({
+
+        success:false,
+
+        message:
+        'Profissional não encontrado'
+
+      });
+
+
+    }
+
+
+
+    res.json({
+
+      success:true,
+
+      message:
+      'Pagamento confirmado com sucesso',
+
+      profissional
+
+    });
+
+
+
+  }catch(err){
+
+
+    console.error(
+      'Erro pagamento:',
+      err
+    );
+
+
+    res.status(500).json({
+
+      success:false,
+
+      message:
+      'Erro ao confirmar pagamento'
+
+    });
+
+
+  }
+
+
+});
+
+
 
 module.exports = router;
