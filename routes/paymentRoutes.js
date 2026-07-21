@@ -8,7 +8,7 @@ router.post('/create-pix', async (req, res) => {
   try {
     const {
       userId,
-      amount = 49.90,
+      amount = 1.00,
       description = 'Taxa de ativação profissional'
     } = req.body;
 

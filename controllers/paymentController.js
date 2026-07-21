@@ -9,8 +9,8 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ error: 'professionalId e amount são obrigatórios' });
     }
 
-    if (amount < 9.90) {
-      return res.status(400).json({ error: 'Valor mínimo é R$ 9,90' });
+    if (amount < 1.99) {
+      return res.status(400).json({ error: 'Valor mínimo é R$ 1,99' });
     }
 
     const professional = await Professional.findById(professionalId);
