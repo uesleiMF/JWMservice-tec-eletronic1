@@ -12,26 +12,37 @@ const PORT = process.env.PORT || 5000;
 // ==================== MIDDLEWARE ====================
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
+// ==================== CORS ====================
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    
+
     const allowedOrigins = [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
+      'http://localhost:3001',
       'https://jw-mservice-tec-eletric2.vercel.app',
       'https://jw-mservice-tec-eletric2-1qxtac5a6-uesleimfs-projects.vercel.app'
     ];
 
-    if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+    if (allowedOrigins.includes(origin) || 
+        origin.endsWith('.vercel.app') || 
+        origin.includes('localhost')) {
       return callback(null, true);
     }
+
+    console.log('🚫 Origin bloqueado:', origin);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With', 
+    'x-access-token'
+  ],
+  optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
