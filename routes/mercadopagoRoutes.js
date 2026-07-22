@@ -1,3 +1,5 @@
+console.log("🔥 CARREGOU mercadopagoRoutes");
+
 const express = require('express');
 const router = express.Router();
 const mercadopago = require('../config/mercadopago');

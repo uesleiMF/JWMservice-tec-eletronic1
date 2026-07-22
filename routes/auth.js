@@ -104,7 +104,7 @@ router.post('/register', async (req, res) => {
               title: 'Cadastro Profissional JW Service',
               quantity: 1,
               currency_id: 'BRL',
-              unit_price: 14.99
+              unit_price: 1.00
             }
           ],
 
@@ -307,11 +307,32 @@ router.post('/login', async (req, res) => {
 
 // ====================== USUÁRIO LOGADO ======================
 router.get('/me', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-passwordHash');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Usuário não encontrado' });
+    }
 
-  res.json({
-    user: req.user
-  });
-
+    res.json({
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        status: user.status,
+        paymentStatus: user.paymentStatus,   // ← Este campo estava faltando
+        verificado: user.verificado,
+        premium: user.premium,
+        isOnline: user.isOnline,
+        // adicione outros se precisar
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erro ao buscar usuário' });
+  }
 });
 
 module.exports = router;

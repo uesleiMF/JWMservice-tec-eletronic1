@@ -3,6 +3,7 @@ const router = express.Router();
 const mercadopago = require('../config/mercadopago');
 const User = require('../models/User');
 
+// ==================== CRIAR PIX ====================
 router.post('/create-pix', async (req, res) => {
   try {
     const {
@@ -26,31 +27,28 @@ router.post('/create-pix', async (req, res) => {
       });
     }
 
-    // Configuração completa para PIX funcionar
+    if (user.paymentStatus === 'pago') {
+      return res.status(400).json({
+        success: false,
+        message: 'Este usuário já possui pagamento confirmado.'
+      });
+    }
+
     const paymentData = {
       transaction_amount: Number(amount),
-      description: description,
+      description,
       payment_method_id: 'pix',
+      date_of_expiration: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       payer: {
         email: user.email || 'cliente@teste.com',
         first_name: user.name?.split(' ')[0] || 'Cliente',
-        last_name: user.name?.split(' ').slice(1).join(' ') || 'Teste',
-        identification: {
-          type: 'CPF',
-          number: '12345678909'   // CPF fictício para testes
-        }
+        last_name: user.name?.split(' ').slice(1).join(' ') || ''
       },
-      external_reference: `ativacao_${user._id}`,
-      additional_info: {
-        items: [{
-          id: "1",
-          title: description,
-          description: "Ativação de conta profissional JWM Service",
-          quantity: 1,
-          unit_price: Number(amount)
-        }]
-      }
+      external_reference: user._id.toString(),
+      metadata: { userId: user._id.toString() }
     };
+
+    console.log('Criando PIX para:', user.email);
 
     const response = await mercadopago.payment.create(paymentData);
     const payment = response.body;
@@ -60,9 +58,14 @@ router.post('/create-pix', async (req, res) => {
     if (!pixData?.qr_code) {
       return res.status(500).json({
         success: false,
-        message: 'Não foi possível gerar o QR Code PIX'
+        message: 'Mercado Pago não retornou QR Code PIX.'
       });
     }
+
+    // Atualiza usuário
+    user.paymentId = payment.id;
+    user.paymentStatus = 'pendente';
+    await user.save();
 
     res.json({
       success: true,
@@ -71,16 +74,38 @@ router.post('/create-pix', async (req, res) => {
         qr_code: pixData.qr_code,
         qr_code_base64: pixData.qr_code_base64,
         expiration_date: payment.date_of_expiration
-      },
-      payment: payment
+      }
     });
 
-  } catch (err) {
-    console.error('Erro Mercado Pago:', err.response?.body || err.message);
+  } catch (error) {
+    console.error('Erro ao criar PIX:', error.response?.body || error.message);
     res.status(500).json({
       success: false,
-      message: err.response?.body?.message || 'Erro ao criar PIX',
-      details: err.message
+      message: 'Erro ao criar PIX',
+      error: error.response?.body || error.message
+    });
+  }
+});
+
+// ==================== VERIFICAR STATUS ====================
+router.get('/status/:paymentId', async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+
+    const response = await mercadopago.payment.get(paymentId);
+    const payment = response.body;
+
+    res.json({
+      success: true,
+      status: payment.status,
+      detail: payment.status_detail,
+      payment
+    });
+  } catch (error) {
+    console.error('Erro ao consultar status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao consultar status do pagamento'
     });
   }
 });
