@@ -138,20 +138,14 @@ socket.on('sendMessage', async (data) => {
       lastMessageAt: new Date()
     });
 
-    console.log(`📨 Mensagem salva e enviada | Conversa: ${conversationId}`);
-
-    // EMISSÃO CORRETA - Para TODOS na sala (incluindo quem enviou)
+    // Emite para TODOS na sala (melhor forma)
     io.to(String(conversationId)).emit('newMessage', message);
 
-    // Notificação extra para o receiver (caso ele não esteja na sala)
-    const receiverSocket = onlineUsers.get(String(receiverId));
-    if (receiverSocket && receiverSocket !== socket.id) {
-      io.to(receiverSocket).emit('newMessage', message);
-    }
+    console.log(`✅ Mensagem enviada na conversa ${conversationId}`);
 
   } catch (err) {
     console.error('Erro ao enviar mensagem:', err);
-    socket.emit('error', { message: 'Erro ao enviar mensagem' });
+    socket.emit('error', { message: 'Erro interno' });
   }
 });
   socket.on('disconnect', () => {

@@ -61,39 +61,26 @@ exports.getMessages = async (req, res) => {
       return res.status(404).json({ message: 'Conversa não encontrada' });
     }
 
-    console.log('✅ Conversa encontrada. Participantes:', conversation.participants);
-
-    // VERIFICAÇÃO MAIS FLEXÍVEL POSSÍVEL
-    const userStr = String(userId);
-    let isParticipant = false;
-
-    if (conversation.participants && Array.isArray(conversation.participants)) {
-      isParticipant = conversation.participants.some(p => String(p) === userStr);
-    }
-    if (!isParticipant && conversation.cliente) {
-      isParticipant = String(conversation.cliente) === userStr;
-    }
-    if (!isParticipant && conversation.profissional) {
-      isParticipant = String(conversation.profissional) === userStr;
-    }
+    const isParticipant = conversation.participants.some(
+      p => String(p) === String(userId)
+    );
 
     if (!isParticipant) {
-      console.log('❌ Usuário NÃO é participante');
+      console.log('❌ Usuário não é participante');
       return res.status(403).json({ message: 'Acesso negado' });
     }
 
     const messages = await Message.find({ conversationId })
       .sort({ createdAt: 1 });
 
-    console.log(`✅ ${messages.length} mensagens retornadas`);
+    console.log(`✅ ${messages.length} mensagens encontradas`);
     res.json({ messages });
 
   } catch (err) {
-    console.error('❌ Erro grave ao buscar mensagens:', err);
+    console.error('❌ Erro ao buscar mensagens:', err);
     res.status(500).json({ message: 'Erro interno' });
   }
 };
-
 // ====================== CRIAR CONVERSA (adicionei para ajudar) ======================
 exports.createConversation = async (req, res) => {
   try {
