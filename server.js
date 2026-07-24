@@ -118,38 +118,42 @@ io.on('connection', (socket) => {
     if (conversationId) socket.leave(String(conversationId));
   });
 
-  socket.on('sendMessage', async (data) => {
-    // ... seu código de mensagem (mantido igual)
-    try {
-      const { conversationId, senderId, receiverId, text } = data;
-      if (!conversationId || !senderId || !receiverId || !text?.trim()) {
-        return socket.emit('error', { message: 'Dados inválidos' });
-      }
+socket.on('sendMessage', async (data) => {
+  try {
+    const { conversationId, senderId, receiverId, text } = data;
 
-      const message = await Message.create({
-        conversationId,
-        senderId,
-        receiverId,
-        text: text.trim()
-      });
-
-      await Conversation.findByIdAndUpdate(conversationId, {
-        lastMessage: message._id,
-        lastMessageAt: new Date()
-      });
-
-      io.to(String(conversationId)).emit('newMessage', message);
-
-      const receiverSocket = onlineUsers.get(String(receiverId));
-      if (receiverSocket) {
-        io.to(receiverSocket).emit('newMessage', message);
-      }
-    } catch (err) {
-      console.error(err);
-      socket.emit('error', { message: 'Erro interno' });
+    if (!conversationId || !senderId || !receiverId || !text?.trim()) {
+      return socket.emit('error', { message: 'Dados inválidos' });
     }
-  });
 
+    const message = await Message.create({
+      conversationId,
+      senderId,
+      receiverId,
+      text: text.trim()
+    });
+
+    await Conversation.findByIdAndUpdate(conversationId, {
+      lastMessage: message._id,
+      lastMessageAt: new Date()
+    });
+
+    console.log(`📨 Mensagem salva e enviada | Conversa: ${conversationId}`);
+
+    // EMISSÃO CORRETA - Para TODOS na sala (incluindo quem enviou)
+    io.to(String(conversationId)).emit('newMessage', message);
+
+    // Notificação extra para o receiver (caso ele não esteja na sala)
+    const receiverSocket = onlineUsers.get(String(receiverId));
+    if (receiverSocket && receiverSocket !== socket.id) {
+      io.to(receiverSocket).emit('newMessage', message);
+    }
+
+  } catch (err) {
+    console.error('Erro ao enviar mensagem:', err);
+    socket.emit('error', { message: 'Erro ao enviar mensagem' });
+  }
+});
   socket.on('disconnect', () => {
     if (socket.userId) onlineUsers.delete(socket.userId);
     console.log('🔴 Usuário desconectado:', socket.id);

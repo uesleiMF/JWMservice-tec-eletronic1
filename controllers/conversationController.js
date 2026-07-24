@@ -93,41 +93,95 @@ exports.getMessages = async (req, res) => {
 // ====================== CRIAR CONVERSA (adicionei para ajudar) ======================
 exports.createConversation = async (req, res) => {
   try {
+
     const { clientId, profissionalId, orderId } = req.body;
 
+
     if (!clientId || !profissionalId) {
-      return res.status(400).json({ message: 'clientId e profissionalId são obrigatórios' });
+      return res.status(400).json({
+        message: 'clientId e profissionalId são obrigatórios'
+      });
     }
 
-    // Verifica se já existe conversa entre eles
+
+    // procura conversa existente independente da ordem
     let conversation = await Conversation.findOne({
-      participants: { $all: [clientId, profissionalId] }
+      participants: {
+        $all: [
+          clientId,
+          profissionalId
+        ]
+      }
     });
+
 
     if (conversation) {
-      console.log('✅ Conversa já existia:', conversation._id);
-      return res.json({ conversation });
+
+      console.log(
+        '✅ Conversa encontrada:',
+        conversation._id
+      );
+
+      return res.json({
+        conversation
+      });
+
     }
 
-    // Cria nova conversa
-    conversation = new Conversation({
-      participants: [clientId, profissionalId],
+
+
+    // cria nova somente se não existir
+
+    conversation = await Conversation.create({
+
+      participants: [
+        clientId,
+        profissionalId
+      ],
+
       client: clientId,
+
       profissional: profissionalId,
+
       orderId: orderId || null,
+
       lastMessageAt: new Date()
+
     });
 
-    await conversation.save();
 
-    console.log('✅ Nova conversa criada:', conversation._id);
-    res.status(201).json({ 
-      message: 'Conversa criada com sucesso',
-      conversation 
+
+    console.log(
+      '🆕 Nova conversa criada:',
+      conversation._id
+    );
+
+
+    res.status(201).json({
+
+      message:
+      'Conversa criada com sucesso',
+
+      conversation
+
     });
 
-  } catch (err) {
-    console.error('❌ Erro ao criar conversa:', err);
-    res.status(500).json({ message: 'Erro ao criar conversa' });
+
+
+  } catch(err) {
+
+    console.error(
+      '❌ Erro ao criar conversa:',
+      err
+    );
+
+
+    res.status(500).json({
+
+      message:
+      'Erro ao criar conversa'
+
+    });
+
   }
 };
