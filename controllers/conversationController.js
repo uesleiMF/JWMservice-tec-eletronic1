@@ -48,45 +48,49 @@ exports.getConversationById = async (req, res) => {
 };
 
 // ====================== BUSCAR MENSAGENS =====================
-
 exports.getMessages = async (req, res) => {
   try {
     const { id: conversationId } = req.params;
     const userId = req.user?.id || req.user?._id;
 
-    console.log(`🔍 [BACKEND] Buscando mensagens - Conv: ${conversationId} | User: ${userId}`);
+    console.log(`🔍 [getMessages] Conv: ${conversationId} | User: ${userId}`);
 
     const conversation = await Conversation.findById(conversationId);
-
     if (!conversation) {
       console.log('❌ Conversa não encontrada');
       return res.status(404).json({ message: 'Conversa não encontrada' });
     }
 
-    console.log('✅ Conversa encontrada:', {
-      id: conversation._id,
-      participants: conversation.participants?.length || 0
-    });
+    console.log('✅ Conversa encontrada. Participantes:', conversation.participants);
 
-    // Verificação mais simples e confiável
-    const isParticipant = conversation.participants.some(
-      p => String(p) === String(userId)
-    );
+    // VERIFICAÇÃO MAIS FLEXÍVEL POSSÍVEL
+    const userStr = String(userId);
+    let isParticipant = false;
+
+    if (conversation.participants && Array.isArray(conversation.participants)) {
+      isParticipant = conversation.participants.some(p => String(p) === userStr);
+    }
+    if (!isParticipant && conversation.cliente) {
+      isParticipant = String(conversation.cliente) === userStr;
+    }
+    if (!isParticipant && conversation.profissional) {
+      isParticipant = String(conversation.profissional) === userStr;
+    }
 
     if (!isParticipant) {
-      console.log('❌ Usuário não é participante');
+      console.log('❌ Usuário NÃO é participante');
       return res.status(403).json({ message: 'Acesso negado' });
     }
 
     const messages = await Message.find({ conversationId })
       .sort({ createdAt: 1 });
 
-    console.log(`✅ ${messages.length} mensagens encontradas`);
+    console.log(`✅ ${messages.length} mensagens retornadas`);
     res.json({ messages });
 
   } catch (err) {
-    console.error('❌ Erro ao buscar mensagens:', err);
-    res.status(500).json({ message: 'Erro interno ao carregar mensagens' });
+    console.error('❌ Erro grave ao buscar mensagens:', err);
+    res.status(500).json({ message: 'Erro interno' });
   }
 };
 
