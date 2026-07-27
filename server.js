@@ -4,6 +4,8 @@ const http = require('http');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const { Server } = require('socket.io');
+const Message = require('./models/Message');
+const Conversation = require('./models/Conversation');
 
 const app = express();
 const server = http.createServer(app);
@@ -76,6 +78,7 @@ app.use('/api/conversations', require('./routes/conversationRoutes'));
 app.use('/api/reviews', require('./routes/reviewRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/mercadopago', require('./routes/mercadopagoRoutes'));
+
 
 // ==================== MERCADO PAGO WEBHOOK ====================
 app.use('/api/webhook/mp', require('./routes/webhookMP'));
