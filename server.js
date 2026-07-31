@@ -62,11 +62,30 @@ const io = new Server(server, {
 // ==================== MONGODB ====================
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ MongoDB conectado'))
-  .catch(err => {
-    console.error('❌ Erro MongoDB:', err);
+  .then(() => {
+    console.log("✅ MongoDB conectado");
+  })
+  .catch((err) => {
+    console.error("❌ Erro MongoDB:", err);
     process.exit(1);
   });
+
+// Eventos da conexão
+mongoose.connection.on("connected", () => {
+  console.log("🟢 Evento: MongoDB conectado");
+});
+
+mongoose.connection.on("disconnected", () => {
+  console.log("🟡 Evento: MongoDB desconectado");
+});
+
+mongoose.connection.on("reconnected", () => {
+  console.log("🔄 Evento: MongoDB reconectado");
+});
+
+mongoose.connection.on("error", (err) => {
+  console.error("🔴 Evento: Erro MongoDB:", err.message);
+});
 
 // ==================== ROTAS ====================
 app.use('/api/auth', require('./routes/auth'));
