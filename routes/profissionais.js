@@ -5,69 +5,14 @@ const User = require('../models/User');
 const { protect } = require('../middleware/authMiddleware');
 
 
+
 // ======================================================
-// LISTAR TODOS OS PROFISSIONAIS ATIVOS E PAGOS
+// LISTAR PROFISSIONAIS ATIVOS
 // ======================================================
+
 router.get('/', async (req, res) => {
 
   try {
-
-    const profs = await User.find({
-      role: 'profissional',
-      status: 'ativo',
-      paymentStatus: 'pago'
-    })
-    .select(
-      'name email servico especialidade phone descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial verificado premium isOnline location'
-    )
-    .sort({
-      premium: -1,
-      avaliacaoMedia: -1
-    });
-
-
-    res.json(profs);
-
-
-  } catch (err) {
-
-    console.error(err);
-
-    res.status(500).json({
-      message: 'Erro ao buscar profissionais'
-    });
-
-  }
-
-});
-
-
-
-// ======================================================
-// PROFISSIONAIS PRÓXIMOS
-// ======================================================
-router.get('/proximos', async (req, res) => {
-
-  try {
-
-    const {
-      latitude,
-      longitude,
-      raio = 50000
-    } = req.query;
-
-
-    if (!latitude || !longitude) {
-
-      return res.status(400).json({
-        message: 'Latitude e longitude são obrigatórios'
-      });
-
-    }
-
-
-    const lat = Number(latitude);
-    const lon = Number(longitude);
 
 
     const profissionais = await User.find({
@@ -76,34 +21,39 @@ router.get('/proximos', async (req, res) => {
 
       status: 'ativo',
 
-      paymentStatus: 'pago',
-
-      location: {
-
-        $near: {
-
-          $geometry: {
-
-            type: 'Point',
-
-            coordinates: [
-              lon,
-              lat
-            ]
-
-          },
-
-          $maxDistance: Number(raio)
-
-        }
-
-      }
+      paymentStatus: 'pago'
 
     })
+
     .select(
-      'name servico especialidade foto city state avaliacaoMedia totalAvaliacoes precoInicial verificado premium isOnline location'
+      `
+      name
+      email
+      servico
+      especialidade
+      phone
+      descricao
+      experiencia
+      foto
+      city
+      state
+      avaliacaoMedia
+      totalAvaliacoes
+      precoInicial
+      verificado
+      premium
+      isOnline
+      location
+      `
     )
-    .limit(20);
+
+    .sort({
+
+      premium:-1,
+
+      avaliacaoMedia:-1
+
+    });
 
 
 
@@ -111,17 +61,336 @@ router.get('/proximos', async (req, res) => {
 
 
 
-  } catch (err) {
+  } catch(err){
 
-    console.error(err);
+
+    console.error(
+      "ERRO LISTAR PROFISSIONAIS:",
+      err
+    );
+
 
     res.status(500).json({
-      message: 'Erro ao buscar profissionais próximos'
+
+      message:
+      "Erro ao buscar profissionais"
+
     });
+
 
   }
 
 });
+
+
+
+
+
+
+
+
+
+// ======================================================
+// PROFISSIONAIS PRÓXIMOS
+// ======================================================
+
+router.get('/proximos', async(req,res)=>{
+
+
+try{
+
+
+const {
+
+latitude,
+
+longitude,
+
+raio = 50000
+
+
+}=req.query;
+
+
+
+if(!latitude || !longitude){
+
+
+return res.status(400).json({
+
+message:
+"Latitude e longitude são obrigatórias"
+
+});
+
+
+}
+
+
+
+
+const lat = Number(latitude);
+
+const lon = Number(longitude);
+
+const distancia = Number(raio);
+
+
+
+
+
+if(
+Number.isNaN(lat) ||
+Number.isNaN(lon)
+){
+
+
+return res.status(400).json({
+
+message:
+"Coordenadas inválidas"
+
+});
+
+
+}
+
+
+
+
+console.log(
+"📍 Buscando profissionais:",
+{
+lat,
+lon,
+distancia
+}
+);
+
+
+
+
+
+let profissionais=[];
+
+
+
+
+// ======================================================
+// BUSCA GEO
+// ======================================================
+
+
+try{
+
+
+profissionais =
+await User.find({
+
+role:"profissional",
+
+status:"ativo",
+
+paymentStatus:"pago",
+
+
+location:{
+
+
+$near:{
+
+
+$geometry:{
+
+
+type:"Point",
+
+
+coordinates:[
+
+lon,
+
+lat
+
+]
+
+
+},
+
+
+$maxDistance:
+distancia
+
+
+}
+
+
+}
+
+
+})
+
+.select(
+
+`
+name
+servico
+especialidade
+foto
+city
+state
+descricao
+experiencia
+avaliacaoMedia
+totalAvaliacoes
+precoInicial
+verificado
+premium
+isOnline
+location
+`
+
+)
+
+.limit(20);
+
+
+
+
+}catch(geoError){
+
+
+console.log(
+
+"⚠️ Falha GEO:",
+geoError.message
+
+);
+
+
+}
+
+
+
+
+
+
+// ======================================================
+// FALLBACK
+// ======================================================
+
+
+if(
+!profissionais ||
+profissionais.length===0
+){
+
+
+console.log(
+"🔎 Usando busca geral..."
+);
+
+
+
+profissionais =
+
+await User.find({
+
+role:"profissional",
+
+status:"ativo",
+
+paymentStatus:"pago"
+
+
+})
+
+.select(
+
+`
+name
+servico
+especialidade
+foto
+city
+state
+descricao
+experiencia
+avaliacaoMedia
+totalAvaliacoes
+precoInicial
+verificado
+premium
+isOnline
+location
+`
+
+)
+
+.sort({
+
+premium:-1,
+
+avaliacaoMedia:-1
+
+})
+
+.limit(20);
+
+
+
+}
+
+
+
+
+
+console.log(
+
+`✅ ${profissionais.length} profissionais encontrados`
+
+);
+
+
+
+res.json(profissionais);
+
+
+
+
+
+}catch(err){
+
+
+console.error(
+
+"❌ ERRO PROFISSIONAIS PRÓXIMOS:",
+err
+
+);
+
+
+
+res.status(500).json({
+
+message:
+"Erro ao buscar profissionais próximos",
+
+error:
+err.message
+
+});
+
+
+}
+
+
+});
+
+
+
+
+
 
 
 
@@ -129,56 +398,96 @@ router.get('/proximos', async (req, res) => {
 // ======================================================
 // MEU PERFIL
 // ======================================================
-router.get('/meu', protect, async (req, res) => {
 
-  try {
-
-
-    if (!req.user?._id) {
-
-      return res.status(401).json({
-        message: 'Não autenticado'
-      });
-
-    }
+router.get('/meu', protect, async(req,res)=>{
 
 
-
-    const user = await User.findById(req.user._id)
-      .select(
-        'name email phone servico especialidade descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial portfolio horarios diasAtendimento latitude longitude role status paymentStatus'
-      );
+try{
 
 
+const user = await User.findById(
 
-    if (!user) {
+req.user._id
 
-      return res.status(404).json({
-        message: 'Perfil não encontrado'
-      });
+)
 
-    }
+.select(
+
+`
+name
+email
+phone
+servico
+especialidade
+descricao
+experiencia
+foto
+city
+state
+avaliacaoMedia
+totalAvaliacoes
+precoInicial
+portfolio
+horarios
+diasAtendimento
+latitude
+longitude
+role
+status
+paymentStatus
+`
+
+);
 
 
-    res.json(user);
+
+if(!user){
 
 
+return res.status(404).json({
 
-  } catch (err) {
-
-    console.error(
-      'Erro na rota /meu:',
-      err
-    );
-
-
-    res.status(500).json({
-      message: 'Erro ao buscar perfil'
-    });
-
-  }
+message:
+"Perfil não encontrado"
 
 });
+
+
+}
+
+
+
+res.json(user);
+
+
+
+}catch(err){
+
+
+console.error(
+
+"ERRO MEU PERFIL:",
+err
+
+);
+
+
+res.status(500).json({
+
+message:
+"Erro ao buscar perfil"
+
+});
+
+
+}
+
+
+});
+
+
+
+
+
 
 
 
@@ -186,60 +495,106 @@ router.get('/meu', protect, async (req, res) => {
 // ======================================================
 // PERFIL PÚBLICO
 // ======================================================
-router.get('/:id', async (req, res) => {
 
-  try {
-
-
-    const profissional = await User.findOne({
-
-      _id: req.params.id,
-
-      role: 'profissional',
-
-      status: 'ativo',
-
-      paymentStatus: 'pago'
-
-    })
-    .select(
-      'name email servico especialidade phone descricao experiencia foto city state avaliacaoMedia totalAvaliacoes precoInicial portfolio horarios diasAtendimento raioAtendimento verificado premium servicosConcluidos favoritos visualizacoes instagram facebook site location'
-    );
+router.get('/:id', async(req,res)=>{
 
 
-
-    if (!profissional) {
-
-      return res.status(404).json({
-
-        message:
-        'Profissional não encontrado ou inativo'
-
-      });
-
-    }
+try{
 
 
-    res.json(profissional);
+const profissional =
+
+await User.findOne({
+
+_id:req.params.id,
+
+role:"profissional",
+
+status:"ativo",
+
+paymentStatus:"pago"
+
+
+})
+
+.select(
+
+`
+name
+email
+phone
+servico
+especialidade
+descricao
+experiencia
+foto
+city
+state
+avaliacaoMedia
+totalAvaliacoes
+precoInicial
+portfolio
+horarios
+diasAtendimento
+raioAtendimento
+verificado
+premium
+servicosConcluidos
+favoritos
+instagram
+facebook
+site
+location
+`
+
+);
 
 
 
-  } catch (err) {
-
-    console.error(
-      'Erro ao buscar profissional:',
-      err
-    );
 
 
-    res.status(500).json({
+if(!profissional){
 
-      message:
-      'Erro ao buscar profissional'
 
-    });
+return res.status(404).json({
 
-  }
+message:
+"Profissional não encontrado"
+
+});
+
+
+}
+
+
+
+
+res.json(profissional);
+
+
+
+}catch(err){
+
+
+console.error(
+
+"ERRO PERFIL:",
+err
+
+);
+
+
+
+res.status(500).json({
+
+message:
+"Erro ao buscar profissional"
+
+});
+
+
+}
+
 
 });
 
@@ -247,125 +602,172 @@ router.get('/:id', async (req, res) => {
 
 
 
+
+
+
+
 // ======================================================
-// ATUALIZAR MEU PERFIL
+// ATUALIZAR PERFIL PROFISSIONAL
 // ======================================================
-router.put('/meu', protect, async (req, res) => {
 
-  try {
-
-
-    const allowedFields = {
-
-      name: req.body.name,
-
-      phone: req.body.phone,
-
-      servico: req.body.servico,
-
-      especialidade: req.body.especialidade,
-
-      descricao: req.body.descricao,
-
-      experiencia: req.body.experiencia,
-
-      city: req.body.city,
-
-      state: req.body.state,
-
-      foto: req.body.foto,
-
-      precoInicial: req.body.precoInicial,
-
-      raioAtendimento: req.body.raioAtendimento,
-
-      horarios: req.body.horarios,
-
-      diasAtendimento: req.body.diasAtendimento,
-
-      instagram: req.body.instagram,
-
-      facebook: req.body.facebook,
-
-      site: req.body.site
-
-    };
+router.put('/meu',protect,async(req,res)=>{
 
 
+try{
 
-    Object.keys(allowedFields)
-      .forEach(key => {
 
-        if (allowedFields[key] === undefined) {
+const camposPermitidos=[
 
-          delete allowedFields[key];
 
-        }
+'name',
 
-      });
+'phone',
+
+'servico',
+
+'especialidade',
+
+'descricao',
+
+'experiencia',
+
+'city',
+
+'state',
+
+'foto',
+
+'precoInicial',
+
+'raioAtendimento',
+
+'horarios',
+
+'diasAtendimento',
+
+'instagram',
+
+'facebook',
+
+'site'
+
+
+];
 
 
 
-    const user = await User.findOneAndUpdate(
-
-      {
-        _id: req.user._id,
-        role: 'profissional'
-      },
-
-      {
-        $set: allowedFields
-      },
-
-      {
-        new:true,
-        runValidators:true
-      }
-
-    );
+const dados={};
 
 
 
-    if (!user) {
-
-      return res.status(404).json({
-
-        message:'Usuário não encontrado'
-
-      });
-
-    }
+camposPermitidos.forEach(c=>{
 
 
-
-    res.json({
-
-      message:
-      'Perfil atualizado com sucesso!',
-
-      user
-
-    });
+if(req.body[c] !== undefined){
 
 
-
-  } catch(err) {
-
-
-    console.error(err);
+dados[c]=req.body[c];
 
 
-    res.status(500).json({
+}
 
-      message:
-      'Erro ao atualizar perfil'
-
-    });
-
-
-  }
 
 });
+
+
+
+
+
+
+const user =
+
+await User.findOneAndUpdate(
+
+{
+
+_id:req.user._id,
+
+role:"profissional"
+
+},
+
+{
+
+$set:dados
+
+},
+
+{
+
+new:true,
+
+runValidators:true
+
+}
+
+);
+
+
+
+
+
+if(!user){
+
+
+return res.status(404).json({
+
+message:
+"Usuário não encontrado"
+
+});
+
+
+}
+
+
+
+
+
+res.json({
+
+message:
+"Perfil atualizado com sucesso",
+
+user
+
+});
+
+
+
+
+
+}catch(err){
+
+
+console.error(
+
+"ERRO ATUALIZAR PERFIL:",
+err
+
+);
+
+
+
+res.status(500).json({
+
+message:
+"Erro ao atualizar perfil"
+
+});
+
+
+}
+
+
+});
+
+
+
 
 
 
@@ -374,102 +776,117 @@ router.put('/meu', protect, async (req, res) => {
 
 // ======================================================
 // CONFIRMAR PAGAMENTO PROFISSIONAL
-// MODO TESTE
 // ======================================================
-router.put('/:id/pagamento', async (req,res)=>{
+
+router.put('/:id/pagamento',async(req,res)=>{
 
 
-  try {
+try{
 
 
-    const profissional =
-      await User.findOneAndUpdate(
+const profissional =
 
-        {
+await User.findOneAndUpdate(
 
-          _id:req.params.id,
+{
 
-          role:'profissional'
+_id:req.params.id,
 
-        },
+role:"profissional"
 
+},
 
-        {
-
-          status:'ativo',
-
-          paymentStatus:'pago',
-
-          verificado:true,
-
-          registrationFeePaidAt:new Date()
-
-        },
+{
 
 
-        {
+status:"ativo",
 
-          new:true
+paymentStatus:"pago",
 
-        }
+verificado:true,
 
-      );
-
-
-
-    if(!profissional){
+registrationFeePaidAt:
+new Date()
 
 
-      return res.status(404).json({
+},
 
-        success:false,
+{
 
-        message:
-        'Profissional não encontrado'
+new:true
 
-      });
+}
 
-
-    }
+);
 
 
 
-    res.json({
-
-      success:true,
-
-      message:
-      'Pagamento confirmado com sucesso',
-
-      profissional
-
-    });
 
 
 
-  }catch(err){
+if(!profissional){
 
 
-    console.error(
-      'Erro pagamento:',
-      err
-    );
+return res.status(404).json({
+
+success:false,
+
+message:
+"Profissional não encontrado"
+
+});
 
 
-    res.status(500).json({
-
-      success:false,
-
-      message:
-      'Erro ao confirmar pagamento'
-
-    });
+}
 
 
-  }
+
+
+
+res.json({
+
+success:true,
+
+message:
+"Pagamento confirmado com sucesso",
+
+profissional
+
+});
+
+
+
+
+
+}catch(err){
+
+
+console.error(
+
+"ERRO PAGAMENTO:",
+err
+
+);
+
+
+
+res.status(500).json({
+
+success:false,
+
+message:
+"Erro ao confirmar pagamento"
+
+});
+
+
+}
 
 
 });
+
+
+
 
 
 

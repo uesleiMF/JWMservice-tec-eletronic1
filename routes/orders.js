@@ -3,225 +3,640 @@ const router = express.Router();
 
 const Order = require('../models/Order');
 const Conversation = require('../models/Conversation');
+
 const { protect } = require('../middleware/authMiddleware');
 
+
+
 // ======================================================
-// CRIAR PEDIDO + CONVERSA (SEGURO)
+// CRIAR PEDIDO + CRIAR CONVERSA
 // ======================================================
 
-router.post('/', protect, async (req, res) => {
-  try {
+router.post('/', protect, async (req,res)=>{
 
-    const { profissionalId, servico, descricao, valor } = req.body;
+try{
 
-    const clienteId = req.user._id;
 
-    if (!profissionalId || !servico) {
-      return res.status(400).json({
-        message: 'Profissional e serviço são obrigatórios'
-      });
-    }
+const {
+    profissionalId,
+    servico,
+    descricao,
+    valor
+}=req.body;
 
-    const newOrder = await Order.create({
-      cliente: clienteId,
-      profissional: profissionalId,
-      servico: servico.trim(),
-      descricao: descricao?.trim() || '',
-      valor: valor || 0,
-      status: 'pendente'
-    });
 
-    const newConversation = await Conversation.create({
-      participants: [clienteId, profissionalId],
-      order: newOrder._id
-    });
 
-    newOrder.conversation = newConversation._id;
-    await newOrder.save();
+const clienteId = req.user._id;
 
-    const orderPopulated = await Order.findById(newOrder._id)
-      .populate('cliente', 'name email phone foto')
-      .populate('profissional', 'name email phone foto');
 
-    res.status(201).json({
-      success: true,
-      order: orderPopulated,
-      conversation: newConversation
-    });
 
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Erro ao criar pedido' });
-  }
+if(!profissionalId || !servico){
+
+return res.status(400).json({
+
+message:
+'Profissional e serviço são obrigatórios'
+
 });
+
+}
+
+
+
+// =============================
+// CRIA PEDIDO
+// =============================
+
+
+const order = await Order.create({
+
+cliente:clienteId,
+
+profissional:profissionalId,
+
+servico:servico.trim(),
+
+descricao:
+descricao || '',
+
+valor:
+Number(valor) || 0,
+
+status:
+'pendente'
+
+});
+
+
+
+
+// =============================
+// CRIA CONVERSA
+// =============================
+
+
+const conversation = await Conversation.create({
+
+participants:[
+
+clienteId,
+
+profissionalId
+
+],
+
+orderId:
+order._id,
+
+metadata:{
+
+createdBy:
+clienteId,
+
+source:
+'order'
+
+}
+
+});
+
+
+
+
+
+// =============================
+// VINCULA AO PEDIDO
+// =============================
+
+
+order.conversation =
+conversation._id;
+
+
+await order.save();
+
+
+
+
+
+// =============================
+// RETORNO COMPLETO
+// =============================
+
+
+const finalOrder = await Order.findById(order._id)
+
+.populate(
+'cliente',
+'name email phone foto role'
+)
+
+.populate(
+'profissional',
+'name email phone foto role'
+)
+
+.populate(
+'conversation'
+);
+
+
+
+const finalConversation =
+await Conversation.findById(
+conversation._id
+)
+
+.populate(
+'participants',
+'name email phone foto role'
+);
+
+
+
+
+
+res.status(201).json({
+
+success:true,
+
+order:finalOrder,
+
+conversation:finalConversation
+
+});
+
+
+
+
+
+}catch(err){
+
+
+console.error(
+"❌ ERRO CRIAR PEDIDO:",
+err
+);
+
+
+res.status(500).json({
+
+message:
+"Erro ao criar pedido",
+
+error:
+err.message
+
+});
+
+
+}
+
+});
+
+
+
+
+
+
+
+
 
 // ======================================================
 // PEDIDOS DO PROFISSIONAL
 // ======================================================
 
-router.get('/professional/:id', protect, async (req, res) => {
-  try {
 
-    const orders = await Order.find({
-      profissional: req.params.id
-    })
-      .populate('cliente', 'name email phone foto')
-      .sort({ createdAt: -1 });
+router.get('/professional/:id',protect,async(req,res)=>{
 
-    res.json(orders);
 
-  } catch (err) {
-    res.status(500).json({ message: 'Erro ao buscar pedidos' });
-  }
+try{
+
+
+const orders = await Order.find({
+
+profissional:req.params.id
+
+})
+
+.populate(
+'cliente',
+'name email phone foto role'
+)
+
+.populate(
+'conversation'
+)
+
+.sort({
+
+createdAt:-1
+
 });
+
+
+
+
+
+res.json(orders);
+
+
+
+
+
+}catch(err){
+
+
+console.error(
+"❌ ERRO BUSCAR PEDIDOS:",
+err
+);
+
+
+
+res.status(500).json({
+
+message:
+"Erro ao buscar pedidos"
+
+});
+
+
+}
+
+
+});
+
+
+
+
+
+
+
+
 
 // ======================================================
 // ACEITAR PEDIDO
 // ======================================================
 
-router.patch('/:id/aceitar', protect, async (req, res) => {
-  try {
 
-    const order = await Order.findById(req.params.id);
+router.patch('/:id/aceitar',protect,async(req,res)=>{
 
-    if (!order) {
-      return res.status(404).json({ message: 'Pedido não encontrado' });
-    }
 
-    // 🔥 segurança: só profissional dono pode aceitar
-    if (order.profissional.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Sem permissão' });
-    }
+try{
 
-    if (order.status !== 'pendente') {
-      return res.status(400).json({ message: 'Pedido já foi processado' });
-    }
 
-    order.status = 'aceito';
-    await order.save();
+const order =
+await Order.findById(req.params.id);
 
-    res.json({
-      message: 'Pedido aceito com sucesso',
-      order
-    });
 
-  } catch (err) {
-    res.status(500).json({ message: 'Erro ao aceitar pedido' });
-  }
+
+if(!order){
+
+return res.status(404).json({
+
+message:
+"Pedido não encontrado"
+
 });
+
+}
+
+
+
+if(
+String(order.profissional)
+!==
+String(req.user._id)
+){
+
+return res.status(403).json({
+
+message:
+"Sem permissão"
+
+});
+
+}
+
+
+
+order.status =
+"aceito";
+
+
+await order.save();
+
+
+
+res.json({
+
+message:
+"Pedido aceito",
+
+order
+
+});
+
+
+
+}catch(err){
+
+console.error(err);
+
+res.status(500).json({
+
+message:
+"Erro ao aceitar pedido"
+
+});
+
+}
+
+
+});
+
+
+
+
+
+
+
+
 
 // ======================================================
 // RECUSAR PEDIDO
 // ======================================================
 
-router.patch('/:id/recusar', protect, async (req, res) => {
-  try {
 
-    const order = await Order.findById(req.params.id);
+router.patch('/:id/recusar',protect,async(req,res)=>{
 
-    if (!order) {
-      return res.status(404).json({ message: 'Pedido não encontrado' });
-    }
 
-    if (order.profissional.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Sem permissão' });
-    }
+try{
 
-    order.status = 'recusado';
-    await order.save();
 
-    res.json({
-      message: 'Pedido recusado',
-      order
-    });
+const order =
+await Order.findById(req.params.id);
 
-  } catch (err) {
-    res.status(500).json({ message: 'Erro ao recusar pedido' });
-  }
+
+
+if(!order){
+
+return res.status(404).json({
+
+message:
+"Pedido não encontrado"
+
 });
+
+}
+
+
+
+
+if(
+String(order.profissional)
+!==
+String(req.user._id)
+
+){
+
+return res.status(403).json({
+
+message:
+"Sem permissão"
+
+});
+
+}
+
+
+
+order.status =
+"recusado";
+
+
+await order.save();
+
+
+
+res.json({
+
+message:
+"Pedido recusado",
+
+order
+
+});
+
+
+
+}catch(err){
+
+
+res.status(500).json({
+
+message:
+"Erro ao recusar pedido"
+
+});
+
+
+}
+
+
+});
+
+
+
+
+
+
+
+
 
 // ======================================================
 // INICIAR SERVIÇO
 // ======================================================
 
-router.patch('/:id/iniciar', protect, async (req, res) => {
-  try {
 
-    const order = await Order.findById(req.params.id);
+router.patch('/:id/iniciar',protect,async(req,res)=>{
 
-    if (order.profissional.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Sem permissão' });
-    }
 
-    if (order.status !== 'aceito') {
-      return res.status(400).json({ message: 'Pedido precisa estar aceito' });
-    }
+try{
 
-    order.status = 'em_andamento';
-    await order.save();
 
-    res.json({
-      message: 'Serviço iniciado',
-      order
-    });
+const order =
+await Order.findById(req.params.id);
 
-  } catch (err) {
-    res.status(500).json({ message: 'Erro ao iniciar serviço' });
-  }
+
+
+if(!order){
+
+return res.status(404).json({
+
+message:
+"Pedido não encontrado"
+
 });
+
+}
+
+
+
+if(
+String(order.profissional)
+!==
+String(req.user._id)
+
+){
+
+return res.status(403).json({
+
+message:
+"Sem permissão"
+
+});
+
+}
+
+
+
+order.status =
+"em_andamento";
+
+
+await order.save();
+
+
+
+res.json({
+
+message:
+"Serviço iniciado",
+
+order
+
+});
+
+
+
+}catch(err){
+
+
+res.status(500).json({
+
+message:
+"Erro ao iniciar serviço"
+
+});
+
+
+}
+
+});
+
+
+
+
+
+
+
+
 
 // ======================================================
 // FINALIZAR SERVIÇO
 // ======================================================
 
-router.patch('/:id/finalizar', protect, async (req, res) => {
-  try {
 
-    const order = await Order.findById(req.params.id);
+router.patch('/:id/finalizar',protect,async(req,res)=>{
 
-    if (order.profissional.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Sem permissão' });
-    }
 
-    order.status = 'finalizado';
-    order.dataFinalizacao = new Date();
+try{
 
-    await order.save();
 
-    res.json({
-      message: 'Serviço finalizado',
-      order
-    });
+const order =
+await Order.findById(req.params.id);
 
-  } catch (err) {
-    res.status(500).json({ message: 'Erro ao finalizar serviço' });
-  }
+
+
+if(!order){
+
+return res.status(404).json({
+
+message:
+"Pedido não encontrado"
+
 });
 
-// ======================================================
-// DELETE (SEGURANÇA)
-// ======================================================
+}
 
-router.delete('/:id', protect, async (req, res) => {
-  try {
 
-    const order = await Order.findById(req.params.id);
 
-    if (!order) {
-      return res.status(404).json({ message: 'Pedido não encontrado' });
-    }
+if(
+String(order.profissional)
+!==
+String(req.user._id)
 
-    if (order.cliente.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Sem permissão' });
-    }
+){
 
-    await order.deleteOne();
+return res.status(403).json({
 
-    res.json({ message: 'Pedido deletado com sucesso' });
+message:
+"Sem permissão"
 
-  } catch (err) {
-    res.status(500).json({ message: 'Erro ao deletar pedido' });
-  }
 });
+
+}
+
+
+
+
+order.status =
+"finalizado";
+
+
+order.dataFinalizacao =
+new Date();
+
+
+
+await order.save();
+
+
+
+res.json({
+
+message:
+"Serviço finalizado",
+
+order
+
+});
+
+
+
+}catch(err){
+
+
+res.status(500).json({
+
+message:
+"Erro ao finalizar serviço"
+
+});
+
+
+}
+
+
+});
+
+
+
+
+
+
+
 
 module.exports = router;

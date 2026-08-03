@@ -1,144 +1,481 @@
 const mongoose = require('mongoose');
 
+
 const ConversationSchema = new mongoose.Schema(
-  {
-    // Participantes da conversa
+
+{
+
+    // ==========================================
+    // PARTICIPANTES
+    // ==========================================
+
     participants: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true,
-      },
+
+        {
+
+            type: mongoose.Schema.Types.ObjectId,
+
+            ref: 'User',
+
+            required: true
+
+        }
+
     ],
 
-    // Pedido relacionado (opcional)
+
+
+    // ==========================================
+    // CLIENTE E PROFISSIONAL
+    // (facilita identificar no chat)
+    // ==========================================
+
+
+    client: {
+
+        type: mongoose.Schema.Types.ObjectId,
+
+        ref: 'User',
+
+        default: null
+
+    },
+
+
+
+    profissional: {
+
+        type: mongoose.Schema.Types.ObjectId,
+
+        ref: 'User',
+
+        default: null
+
+    },
+
+
+
+
+    // ==========================================
+    // PEDIDO RELACIONADO
+    // ==========================================
+
+
+    order: {
+
+        type: mongoose.Schema.Types.ObjectId,
+
+        ref: 'Order',
+
+        default: null
+
+    },
+
+
+
     orderId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Order',
-      default: null,
-    },
 
-    // Última mensagem enviada
-    lastMessage: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Message',
-      default: null,
-    },
-
-    // Data da última mensagem
-    lastMessageAt: {
-      type: Date,
-      default: Date.now,
-    },
-
-    // Status da conversa
-    status: {
-      type: String,
-      enum: ['active', 'closed', 'archived', 'blocked'],
-      default: 'active',
-    },
-
-    // Quantidade de mensagens não lidas por usuário
-    unreadCount: {
-      type: Map,
-      of: Number,
-      default: () => new Map(),
-    },
-
-    // Usuários que ocultaram/excluíram a conversa
-    deletedFor: [
-      {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-      },
+
+        ref: 'Order',
+
+        default: null
+
+    },
+
+
+
+
+
+    // ==========================================
+    // ÚLTIMA MENSAGEM
+    // ==========================================
+
+
+    lastMessage: {
+
+        type: mongoose.Schema.Types.ObjectId,
+
+        ref: 'Message',
+
+        default: null
+
+    },
+
+
+    lastMessageAt: {
+
+        type: Date,
+
+        default: Date.now
+
+    },
+
+
+
+
+
+
+    // ==========================================
+    // STATUS
+    // ==========================================
+
+
+    status: {
+
+        type:String,
+
+        enum:[
+
+            'active',
+
+            'closed',
+
+            'archived',
+
+            'blocked'
+
+        ],
+
+        default:'active'
+
+    },
+
+
+
+
+
+
+    // ==========================================
+    // MENSAGENS NÃO LIDAS
+    // ==========================================
+
+
+    unreadCount:{
+
+
+        type:Map,
+
+        of:Number,
+
+        default:()=>new Map()
+
+
+    },
+
+
+
+
+
+
+
+    // ==========================================
+    // EXCLUSÃO PARA USUÁRIO
+    // ==========================================
+
+
+    deletedFor:[
+
+
+        {
+
+            type:mongoose.Schema.Types.ObjectId,
+
+            ref:'User'
+
+
+        }
+
+
     ],
 
-    // Bloqueio da conversa
-    isBlocked: {
-      type: Boolean,
-      default: false,
+
+
+
+
+
+    // ==========================================
+    // BLOQUEIO
+    // ==========================================
+
+
+    isBlocked:{
+
+
+        type:Boolean,
+
+        default:false
+
+
     },
 
-    blockedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      default: null,
+
+    blockedBy:{
+
+
+        type:mongoose.Schema.Types.ObjectId,
+
+        ref:'User',
+
+        default:null
+
+
     },
 
-    // Informações adicionais
-    metadata: {
-      createdBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        default: null,
-      },
 
-      source: {
-        type: String,
-        enum: ['manual', 'order', 'system'],
-        default: 'manual',
-      },
-    },
-  },
-  {
-    timestamps: true,
-  }
+
+
+
+
+    // ==========================================
+    // METADADOS
+    // ==========================================
+
+
+    metadata:{
+
+
+        createdBy:{
+
+
+            type:mongoose.Schema.Types.ObjectId,
+
+            ref:'User',
+
+            default:null
+
+
+        },
+
+
+
+        source:{
+
+
+            type:String,
+
+
+            enum:[
+
+                'manual',
+
+                'order',
+
+                'system'
+
+            ],
+
+
+            default:'order'
+
+
+        }
+
+
+
+    }
+
+
+
+},
+
+
+{
+
+    timestamps:true
+
+}
+
 );
 
-// ==================== ÍNDICES ====================
 
-// Buscar conversas de um usuário
-ConversationSchema.index({ participants: 1 });
 
-// Conversas relacionadas a pedidos
-ConversationSchema.index({ orderId: 1 });
 
-// Ordenação das conversas
-ConversationSchema.index({ lastMessageAt: -1 });
 
-// Status
-ConversationSchema.index({ status: 1 });
 
-// Busca otimizada para dashboard
+
+// ==========================================
+// ÍNDICES
+// ==========================================
+
+
 ConversationSchema.index({
-  participants: 1,
-  lastMessageAt: -1,
+
+    participants:1
+
 });
 
-// ==================== MÉTODOS ====================
 
-// Incrementa mensagens não lidas
-ConversationSchema.methods.incrementUnread = function (userId) {
-  const current = this.unreadCount.get(String(userId)) || 0;
-  this.unreadCount.set(String(userId), current + 1);
+ConversationSchema.index({
+
+    orderId:1
+
+});
+
+
+ConversationSchema.index({
+
+    order:1
+
+});
+
+
+ConversationSchema.index({
+
+    lastMessageAt:-1
+
+});
+
+
+ConversationSchema.index({
+
+    status:1
+
+});
+
+
+
+ConversationSchema.index({
+
+    participants:1,
+
+    lastMessageAt:-1
+
+});
+
+
+
+
+
+
+
+
+// ==========================================
+// MÉTODOS
+// ==========================================
+
+
+ConversationSchema.methods.incrementUnread = function(userId){
+
+
+const atual =
+
+this.unreadCount.get(
+
+String(userId)
+
+)
+
+||0;
+
+
+
+this.unreadCount.set(
+
+String(userId),
+
+atual+1
+
+);
+
+
+
 };
 
-// Limpa contador de mensagens não lidas
-ConversationSchema.methods.clearUnread = function (userId) {
-  this.unreadCount.set(String(userId), 0);
+
+
+
+
+
+ConversationSchema.methods.clearUnread=function(userId){
+
+
+this.unreadCount.set(
+
+String(userId),
+
+0
+
+);
+
+
 };
 
-// Oculta conversa para um usuário
-ConversationSchema.methods.hideForUser = function (userId) {
-  if (!this.deletedFor.some(id => id.toString() === userId.toString())) {
-    this.deletedFor.push(userId);
-  }
+
+
+
+
+
+ConversationSchema.methods.hideForUser=function(userId){
+
+
+if(
+
+!this.deletedFor.some(
+
+id=>
+
+id.toString()===userId.toString()
+
+)
+
+){
+
+
+this.deletedFor.push(userId);
+
+
+}
+
+
 };
 
-// Bloqueia conversa
-ConversationSchema.methods.blockConversation = function (userId) {
-  this.isBlocked = true;
-  this.blockedBy = userId;
-  this.status = 'blocked';
+
+
+
+
+
+ConversationSchema.methods.blockConversation=function(userId){
+
+
+this.isBlocked=true;
+
+this.blockedBy=userId;
+
+this.status='blocked';
+
+
 };
 
-// Desbloqueia conversa
-ConversationSchema.methods.unblockConversation = function () {
-  this.isBlocked = false;
-  this.blockedBy = null;
-  this.status = 'active';
+
+
+
+
+
+ConversationSchema.methods.unblockConversation=function(){
+
+
+this.isBlocked=false;
+
+this.blockedBy=null;
+
+this.status='active';
+
+
 };
 
-// ==================== EXPORT ====================
 
-module.exports = mongoose.model('Conversation', ConversationSchema);
+
+
+
+
+
+
+module.exports =
+mongoose.model(
+
+'Conversation',
+
+ConversationSchema
+
+);
