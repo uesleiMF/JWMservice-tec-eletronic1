@@ -1,76 +1,77 @@
-require('dotenv').config();
-const express = require('express');
-const http = require('http');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const { Server } = require('socket.io');
-const Message = require('./models/Message');
-const Conversation = require('./models/Conversation');
+require("dotenv").config();
+const express = require("express");
+const http = require("http");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const { Server } = require("socket.io");
+
+const Message = require("./models/Message");
+const Conversation = require("./models/Conversation");
 
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 
 // ==================== MIDDLEWARE ====================
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
 // ==================== CORS ====================
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
 
     const allowedOrigins = [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'http://localhost:3001',
-      'https://jw-mservice-tec-eletric2.vercel.app',
-      'https://jw-mservice-tec-eletric2-1qxtac5a6-uesleimfs-projects.vercel.app'
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://localhost:3001",
+      "https://jw-mservice-tec-eletric2.vercel.app",
+      "https://jw-mservice-tec-eletric2-1qxtac5a6-uesleimfs-projects.vercel.app",
     ];
 
-    if (allowedOrigins.includes(origin) || 
-        origin.endsWith('.vercel.app') || 
-        origin.includes('localhost')) {
+    if (
+      allowedOrigins.includes(origin) ||
+      origin.endsWith(".vercel.app") ||
+      origin.includes("localhost")
+    ) {
       return callback(null, true);
     }
 
-    console.log('🚫 Origin bloqueado:', origin);
-    callback(new Error('Not allowed by CORS'));
+    console.log("🚫 Origin bloqueado:", origin);
+    callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With', 
-    'x-access-token'
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "x-access-token",
   ],
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 // ==================== SOCKET.IO ====================
 const io = new Server(server, {
   cors: corsOptions,
-  transports: ['websocket', 'polling'],
-  path: '/socket.io',
+  transports: ["websocket", "polling"],
+  path: "/socket.io",
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
 });
 
 // ==================== MONGODB ====================
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log("✅ MongoDB conectado");
-  })
+  .then(() => console.log("✅ MongoDB conectado"))
   .catch((err) => {
     console.error("❌ Erro MongoDB:", err);
     process.exit(1);
   });
 
-// Eventos da conexão
 mongoose.connection.on("connected", () => {
   console.log("🟢 Evento: MongoDB conectado");
 });
@@ -88,91 +89,131 @@ mongoose.connection.on("error", (err) => {
 });
 
 // ==================== ROTAS ====================
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/profissionais', require('./routes/profissionais'));
-app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api/orders', require('./routes/orders'));
-app.use('/api/chat', require('./routes/chatRoutes'));
-app.use('/api/conversations', require('./routes/conversationRoutes'));
-app.use('/api/reviews', require('./routes/reviewRoutes'));
-app.use('/api/payments', require('./routes/paymentRoutes'));
-app.use('/api/mercadopago', require('./routes/mercadopagoRoutes'));
-
-
-// ==================== MERCADO PAGO WEBHOOK ====================
-app.use('/api/webhook/mp', require('./routes/webhookMP'));
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/profissionais", require("./routes/profissionais"));
+app.use("/api/users", require("./routes/userRoutes"));
+app.use("/api/orders", require("./routes/orders"));
+app.use("/api/chat", require("./routes/chatRoutes"));
+app.use("/api/conversations", require("./routes/conversationRoutes"));
+app.use("/api/reviews", require("./routes/reviewRoutes"));
+app.use("/api/payments", require("./routes/paymentRoutes"));
+app.use("/api/mercadopago", require("./routes/mercadopagoRoutes"));
+app.use("/api/webhook/mp", require("./routes/webhookMP"));
 
 // ==================== HEALTH CHECK ====================
-app.get('/', (req, res) => {
+app.get("/", (req, res) => {
   res.json({
-    status: 'online',
-    message: 'JW Service API funcionando 🚀',
-    version: '1.0.0'
+    status: "online",
+    message: "JW Service API funcionando 🚀",
+    version: "1.0.0",
   });
 });
 
-app.get('/socket-health', (req, res) => {
+app.get("/socket-health", (req, res) => {
   res.json({
-    status: 'ok',
+    status: "ok",
     uptime: process.uptime(),
-    sockets: io.engine.clientsCount
+    sockets: io.engine.clientsCount,
   });
 });
 
 // ==================== SOCKET EVENTS ====================
-const onlineUsers = new Map();
+const onlineUsers = new Map(); // userId -> Set de socketIds
 
-io.on('connection', (socket) => {
-  console.log('🟢 Usuário conectado:', socket.id);
+io.on("connection", (socket) => {
+  console.log("🟢 Socket conectado:", socket.id);
 
-  socket.on('authenticate', (userId) => {
-    if (userId) {
-      socket.userId = String(userId);
-      onlineUsers.set(String(userId), socket.id);
+  // ========== USUÁRIO ONLINE ==========
+  socket.on("user-online", (userId) => {
+    if (!userId) return;
+
+    const id = String(userId);
+
+    if (!onlineUsers.has(id)) {
+      onlineUsers.set(id, new Set());
+    }
+
+    onlineUsers.get(id).add(socket.id);
+    socket.userId = id;
+
+    io.emit("online-users", Array.from(onlineUsers.keys()));
+    console.log("🟢 Usuário online:", id);
+  });
+
+  // ========== ENTRAR NA CONVERSA ==========
+  socket.on("joinConversation", (conversationId) => {
+    if (conversationId) {
+      socket.join(String(conversationId));
+      console.log("📌 Entrou na conversa:", conversationId);
     }
   });
 
-  socket.on('joinConversation', (conversationId) => {
-    if (conversationId) socket.join(String(conversationId));
+  // ========== SAIR DA CONVERSA ==========
+  socket.on("leaveConversation", (conversationId) => {
+    if (conversationId) {
+      socket.leave(String(conversationId));
+    }
   });
 
-  socket.on('leaveConversation', (conversationId) => {
-    if (conversationId) socket.leave(String(conversationId));
+  // ========== DIGITANDO ==========
+  socket.on("typing", ({ conversationId }) => {
+    if (conversationId) {
+      socket.to(String(conversationId)).emit("typing");
+    }
   });
 
-socket.on('sendMessage', async (data) => {
-  try {
-    const { conversationId, senderId, receiverId, text } = data;
+  socket.on("stopTyping", ({ conversationId }) => {
+    if (conversationId) {
+      socket.to(String(conversationId)).emit("stopTyping");
+    }
+  });
 
-    if (!conversationId || !senderId || !receiverId || !text?.trim()) {
-      return socket.emit('error', { message: 'Dados inválidos' });
+  // ========== ENVIAR MENSAGEM ==========
+  socket.on("sendMessage", async (data) => {
+    try {
+      const { conversationId, senderId, receiverId, text } = data;
+
+      if (!conversationId || !senderId || !receiverId || !text?.trim()) {
+        return socket.emit("error", { message: "Dados inválidos" });
+      }
+
+      const message = await Message.create({
+        conversationId,
+        senderId,
+        receiverId,
+        text: text.trim(),
+      });
+
+      await Conversation.findByIdAndUpdate(conversationId, {
+        lastMessage: message._id,
+        lastMessageAt: new Date(),
+      });
+
+      io.to(String(conversationId)).emit("newMessage", message);
+      console.log(`💬 Mensagem enviada na conversa ${conversationId}`);
+    } catch (err) {
+      console.error("Erro ao enviar mensagem:", err);
+      socket.emit("error", { message: "Erro interno" });
+    }
+  });
+
+  // ========== DESCONECTAR ==========
+  socket.on("disconnect", () => {
+    if (socket.userId) {
+      const sockets = onlineUsers.get(socket.userId);
+
+      if (sockets) {
+        sockets.delete(socket.id);
+
+        if (sockets.size === 0) {
+          onlineUsers.delete(socket.userId);
+        }
+      }
+
+      io.emit("online-users", Array.from(onlineUsers.keys()));
     }
 
-    const message = await Message.create({
-      conversationId,
-      senderId,
-      receiverId,
-      text: text.trim()
-    });
-
-    await Conversation.findByIdAndUpdate(conversationId, {
-      lastMessage: message._id,
-      lastMessageAt: new Date()
-    });
-
-    // Emite para TODOS na sala (melhor forma)
-    io.to(String(conversationId)).emit('newMessage', message);
-
-    console.log(`✅ Mensagem enviada na conversa ${conversationId}`);
-
-  } catch (err) {
-    console.error('Erro ao enviar mensagem:', err);
-    socket.emit('error', { message: 'Erro interno' });
-  }
-});
-  socket.on('disconnect', () => {
-    if (socket.userId) onlineUsers.delete(socket.userId);
-    console.log('🔴 Usuário desconectado:', socket.id);
+    console.log("🔴 Socket desconectado:", socket.id);
   });
 });
 
@@ -181,12 +222,12 @@ app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({
     success: false,
-    message: err.message || 'Erro interno do servidor'
+    message: err.message || "Erro interno do servidor",
   });
 });
 
 // ==================== START SERVER ====================
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(`🌐 http://localhost:${PORT}`);
 });
