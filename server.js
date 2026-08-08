@@ -1,233 +1,395 @@
 require("dotenv").config();
+
 const express = require("express");
 const http = require("http");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const { Server } = require("socket.io");
+const orcamentoRoutes = require("./routes/orcamentoRoutes");
 
-const Message = require("./models/Message");
-const Conversation = require("./models/Conversation");
 
 const app = express();
 const server = http.createServer(app);
+
 const PORT = process.env.PORT || 5000;
 
-// ==================== MIDDLEWARE ====================
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// ==================== CORS ====================
+// ======================================================
+// MIDDLEWARE
+// ======================================================
+
+app.use(
+  express.json({
+    limit: "10mb",
+  })
+);
+
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "10mb",
+  })
+);
+
+
+// ======================================================
+// CORS
+// ======================================================
+
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
+
+    // Permite requisições sem origin
+    // (Postman, aplicações internas etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+
 
     const allowedOrigins = [
+
       "http://localhost:3000",
+
       "http://127.0.0.1:3000",
+
       "http://localhost:3001",
+
       "https://jw-mservice-tec-eletric2.vercel.app",
+
       "https://jw-mservice-tec-eletric2-1qxtac5a6-uesleimfs-projects.vercel.app",
+
     ];
+
+
+    // --------------------------------------------------
+    // Origens autorizadas
+    // --------------------------------------------------
 
     if (
       allowedOrigins.includes(origin) ||
       origin.endsWith(".vercel.app") ||
       origin.includes("localhost")
     ) {
+
       return callback(null, true);
+
     }
 
-    console.log("🚫 Origin bloqueado:", origin);
-    callback(new Error("Not allowed by CORS"));
+
+    console.log(
+      "🚫 Origin bloqueado:",
+      origin
+    );
+
+
+    callback(
+      new Error("Not allowed by CORS")
+    );
+
   },
+
   credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+  ],
+
   allowedHeaders: [
     "Content-Type",
     "Authorization",
     "X-Requested-With",
     "x-access-token",
   ],
+
   optionsSuccessStatus: 200,
 };
 
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
 
-// ==================== SOCKET.IO ====================
+app.use(
+  cors(corsOptions)
+);
+
+
+app.options(
+  "*",
+  cors(corsOptions)
+);
+
+
+// ======================================================
+// SOCKET.IO
+// ======================================================
+
 const io = new Server(server, {
+
   cors: corsOptions,
-  transports: ["websocket", "polling"],
+
+  transports: [
+    "websocket",
+    "polling",
+  ],
+
   path: "/socket.io",
+
   pingTimeout: 60000,
+
   pingInterval: 25000,
+
 });
 
-// ==================== MONGODB ====================
+
+// ======================================================
+// MONGODB
+// ======================================================
+
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB conectado"))
+
+  .then(() => {
+
+    console.log(
+      "✅ MongoDB conectado"
+    );
+
+  })
+
   .catch((err) => {
-    console.error("❌ Erro MongoDB:", err);
+
+    console.error(
+      "❌ Erro MongoDB:",
+      err
+    );
+
     process.exit(1);
+
   });
 
-mongoose.connection.on("connected", () => {
-  console.log("🟢 Evento: MongoDB conectado");
-});
 
-mongoose.connection.on("disconnected", () => {
-  console.log("🟡 Evento: MongoDB desconectado");
-});
+mongoose.connection.on(
+  "connected",
+  () => {
 
-mongoose.connection.on("reconnected", () => {
-  console.log("🔄 Evento: MongoDB reconectado");
-});
+    console.log(
+      "🟢 Evento: MongoDB conectado"
+    );
 
-mongoose.connection.on("error", (err) => {
-  console.error("🔴 Evento: Erro MongoDB:", err.message);
-});
+  }
+);
 
-// ==================== ROTAS ====================
-app.use("/api/auth", require("./routes/auth"));
-app.use("/api/profissionais", require("./routes/profissionais"));
-app.use("/api/users", require("./routes/userRoutes"));
-app.use("/api/orders", require("./routes/orders"));
-app.use("/api/chat", require("./routes/chatRoutes"));
-app.use("/api/conversations", require("./routes/conversationRoutes"));
-app.use("/api/reviews", require("./routes/reviewRoutes"));
-app.use("/api/payments", require("./routes/paymentRoutes"));
-app.use("/api/mercadopago", require("./routes/mercadopagoRoutes"));
-app.use("/api/webhook/mp", require("./routes/webhookMP"));
 
-// ==================== HEALTH CHECK ====================
-app.get("/", (req, res) => {
-  res.json({
-    status: "online",
-    message: "JW Service API funcionando 🚀",
-    version: "1.0.0",
-  });
-});
+mongoose.connection.on(
+  "disconnected",
+  () => {
 
-app.get("/socket-health", (req, res) => {
-  res.json({
-    status: "ok",
-    uptime: process.uptime(),
-    sockets: io.engine.clientsCount,
-  });
-});
+    console.log(
+      "🟡 Evento: MongoDB desconectado"
+    );
 
-// ==================== SOCKET EVENTS ====================
-const onlineUsers = new Map(); // userId -> Set de socketIds
+  }
+);
 
-io.on("connection", (socket) => {
-  console.log("🟢 Socket conectado:", socket.id);
 
-  // ========== USUÁRIO ONLINE ==========
-  socket.on("user-online", (userId) => {
-    if (!userId) return;
+mongoose.connection.on(
+  "reconnected",
+  () => {
 
-    const id = String(userId);
+    console.log(
+      "🔄 Evento: MongoDB reconectado"
+    );
 
-    if (!onlineUsers.has(id)) {
-      onlineUsers.set(id, new Set());
-    }
+  }
+);
 
-    onlineUsers.get(id).add(socket.id);
-    socket.userId = id;
 
-    io.emit("online-users", Array.from(onlineUsers.keys()));
-    console.log("🟢 Usuário online:", id);
-  });
+mongoose.connection.on(
+  "error",
+  (err) => {
 
-  // ========== ENTRAR NA CONVERSA ==========
-  socket.on("joinConversation", (conversationId) => {
-    if (conversationId) {
-      socket.join(String(conversationId));
-      console.log("📌 Entrou na conversa:", conversationId);
-    }
-  });
+    console.error(
+      "🔴 Evento: Erro MongoDB:",
+      err.message
+    );
 
-  // ========== SAIR DA CONVERSA ==========
-  socket.on("leaveConversation", (conversationId) => {
-    if (conversationId) {
-      socket.leave(String(conversationId));
-    }
-  });
+  }
+);
 
-  // ========== DIGITANDO ==========
-  socket.on("typing", ({ conversationId }) => {
-    if (conversationId) {
-      socket.to(String(conversationId)).emit("typing");
-    }
-  });
 
-  socket.on("stopTyping", ({ conversationId }) => {
-    if (conversationId) {
-      socket.to(String(conversationId)).emit("stopTyping");
-    }
-  });
+// ======================================================
+// ROTAS
+// ======================================================
+app.use("/api/orcamentos", orcamentoRoutes);
 
-  // ========== ENVIAR MENSAGEM ==========
-  socket.on("sendMessage", async (data) => {
-    try {
-      const { conversationId, senderId, receiverId, text } = data;
+app.use(
+  "/api/auth",
+  require("./routes/auth")
+);
 
-      if (!conversationId || !senderId || !receiverId || !text?.trim()) {
-        return socket.emit("error", { message: "Dados inválidos" });
-      }
 
-      const message = await Message.create({
-        conversationId,
-        senderId,
-        receiverId,
-        text: text.trim(),
-      });
+app.use(
+  "/api/profissionais",
+  require("./routes/profissionais")
+);
 
-      await Conversation.findByIdAndUpdate(conversationId, {
-        lastMessage: message._id,
-        lastMessageAt: new Date(),
-      });
 
-      io.to(String(conversationId)).emit("newMessage", message);
-      console.log(`💬 Mensagem enviada na conversa ${conversationId}`);
-    } catch (err) {
-      console.error("Erro ao enviar mensagem:", err);
-      socket.emit("error", { message: "Erro interno" });
-    }
-  });
+app.use(
+  "/api/users",
+  require("./routes/userRoutes")
+);
 
-  // ========== DESCONECTAR ==========
-  socket.on("disconnect", () => {
-    if (socket.userId) {
-      const sockets = onlineUsers.get(socket.userId);
 
-      if (sockets) {
-        sockets.delete(socket.id);
+app.use(
+  "/api/orders",
+  require("./routes/orders")
+);
 
-        if (sockets.size === 0) {
-          onlineUsers.delete(socket.userId);
-        }
-      }
 
-      io.emit("online-users", Array.from(onlineUsers.keys()));
-    }
+app.use(
+  "/api/chat",
+  require("./routes/chatRoutes")
+);
 
-    console.log("🔴 Socket desconectado:", socket.id);
-  });
-});
 
-// ==================== ERROR HANDLER ====================
-app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(500).json({
-    success: false,
-    message: err.message || "Erro interno do servidor",
-  });
-});
+app.use(
+  "/api/conversations",
+  require("./routes/conversationRoutes")
+);
 
-// ==================== START SERVER ====================
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Servidor rodando na porta ${PORT}`);
-  console.log(`🌐 http://localhost:${PORT}`);
-});
+
+app.use(
+  "/api/reviews",
+  require("./routes/reviewRoutes")
+);
+
+
+app.use(
+  "/api/payments",
+  require("./routes/paymentRoutes")
+);
+
+
+app.use(
+  "/api/mercadopago",
+  require("./routes/mercadopagoRoutes")
+);
+
+
+app.use(
+  "/api/webhook/mp",
+  require("./routes/webhookMP")
+);
+
+
+// ======================================================
+// SOCKET HANDLER
+// ======================================================
+//
+// IMPORTANTE:
+//
+// Todo o comportamento do Socket.IO fica centralizado
+// em socket/socketHandler.js.
+//
+// Não coloque outro io.on("connection") aqui.
+// Isso evita eventos duplicados.
+//
+require("./socket/socketHandler")(io);
+
+
+// ======================================================
+// HEALTH CHECK
+// ======================================================
+
+app.get(
+  "/",
+  (req, res) => {
+
+    res.json({
+
+      status: "online",
+
+      message:
+        "JW Service API funcionando 🚀",
+
+      version:
+        "2.0.0",
+
+    });
+
+  }
+);
+
+
+// ======================================================
+// SOCKET HEALTH
+// ======================================================
+
+app.get(
+  "/socket-health",
+  (req, res) => {
+
+    res.json({
+
+      status: "ok",
+
+      uptime:
+        process.uptime(),
+
+      sockets:
+        io.engine.clientsCount,
+
+    });
+
+  }
+);
+
+
+// ======================================================
+// ERROR HANDLER
+// ======================================================
+
+app.use(
+  (err, req, res, next) => {
+
+    console.error(
+      "❌ ERROR HANDLER:",
+      err
+    );
+
+
+    res.status(500).json({
+
+      success: false,
+
+      message:
+        err.message ||
+        "Erro interno do servidor",
+
+    });
+
+  }
+);
+
+
+// ======================================================
+// START SERVER
+// ======================================================
+
+server.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+
+    console.log(
+      `🚀 Servidor rodando na porta ${PORT}`
+    );
+
+    console.log(
+      `🌐 http://localhost:${PORT}`
+    );
+
+  }
+);
