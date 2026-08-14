@@ -3,6 +3,7 @@ const router = express.Router();
 const Orcamento = require("../models/Orcamento");
 const { protect } = require("../middleware/authMiddleware");
 const mongoose = require("mongoose");
+const gerarNumeroOS = require("../utils/gerarNumeroOS"); // ← adicione este import
 
 // Helper de cálculo (usado no update)
 const calcularTotais = (maoDeObra = [], materiais = [], equipamentos = []) => {
@@ -31,6 +32,7 @@ const calcularTotais = (maoDeObra = [], materiais = [], equipamentos = []) => {
 router.post("/", protect, async (req, res) => {
   try {
     const {
+      numeroOS,
       cliente,
       servico,
       unidade,
@@ -42,7 +44,9 @@ router.post("/", protect, async (req, res) => {
     } = req.body;
 
     if (!cliente || !servico) {
-      return res.status(400).json({ message: "Cliente e serviço são obrigatórios" });
+      return res
+        .status(400)
+        .json({ message: "Cliente e serviço são obrigatórios" });
     }
 
     // Filtra linhas vazias (sem descrição)
@@ -58,8 +62,24 @@ router.post("/", protect, async (req, res) => {
     const materiaisFiltrados = filtrarItens(materiais);
     const equipamentosFiltrados = filtrarItens(equipamentos);
 
+    // ===== GERA O NÚMERO DA OS NO BACKEND =====
+    let numeroFinal = numeroOS?.trim() || null;
+
+    if (!numeroFinal) {
+      numeroFinal = await gerarNumeroOS();
+    }
+
+    // Verifica se o número já existe
+    const existe = await Orcamento.findOne({ numeroOS: numeroFinal });
+    if (existe) {
+      return res.status(400).json({
+        message: "Já existe um orçamento com esse número de OS.",
+      });
+    }
+
     const orcamento = await Orcamento.create({
       profissional: req.user._id,
+      numeroOS: numeroFinal,
       cliente: cliente.trim(),
       servico: servico.trim(),
       unidade: unidade || "m²",
@@ -76,12 +96,21 @@ router.post("/", protect, async (req, res) => {
     });
   } catch (err) {
     console.error("ERRO CRIAR ORÇAMENTO:", err);
+
+    // Trata erro de duplicidade do unique index
+    if (err.code === 11000) {
+      return res.status(400).json({
+        message: "Número de OS já existe. Tente novamente.",
+      });
+    }
+
     res.status(500).json({
       message: "Erro ao criar orçamento",
       error: err.message,
     });
   }
 });
+
 // ======================================================
 // LISTAR MEUS ORÇAMENTOS
 // ======================================================
@@ -89,6 +118,7 @@ router.get("/meus", protect, async (req, res) => {
   try {
     const { status } = req.query;
     const filtro = { profissional: req.user._id };
+
     if (status) filtro.status = status;
 
     const orcamentos = await Orcamento.find(filtro)
@@ -131,7 +161,7 @@ router.get("/:id", protect, async (req, res) => {
 });
 
 // ======================================================
-// ATUALIZAR ORÇAMENTO
+// ATUALIZAR ORÇAMENTO (EDIÇÃO COMPLETA)
 // ======================================================
 router.put("/:id", protect, async (req, res) => {
   try {
@@ -150,10 +180,14 @@ router.put("/:id", protect, async (req, res) => {
     }
 
     if (orcamento.status === "finalizado") {
-      return res.status(400).json({ message: "Orçamento finalizado não pode ser editado" });
+      return res
+        .status(400)
+        .json({ message: "Orçamento finalizado não pode ser editado" });
     }
 
+    // Campos que podem ser atualizados
     const camposPermitidos = [
+      "numeroOS",
       "cliente",
       "servico",
       "unidade",
@@ -186,6 +220,13 @@ router.put("/:id", protect, async (req, res) => {
     });
   } catch (err) {
     console.error("ERRO ATUALIZAR ORÇAMENTO:", err);
+
+    if (err.code === 11000) {
+      return res.status(400).json({
+        message: "Número de OS já existe.",
+      });
+    }
+
     res.status(500).json({ message: "Erro ao atualizar orçamento" });
   }
 });

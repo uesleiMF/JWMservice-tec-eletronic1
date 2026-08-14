@@ -15,6 +15,14 @@ const OrcamentoSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // Número da Ordem de Serviço
+    numeroOS: {
+      type: String,
+      trim: true,
+      index: true,
+      unique: true,
+      sparse: true, // permite documentos antigos sem número
+    },
     cliente: {
       type: String,
       required: true,
@@ -55,7 +63,8 @@ const OrcamentoSchema = new mongoose.Schema(
 OrcamentoSchema.pre("save", function (next) {
   const calc = (lista = []) =>
     lista.reduce(
-      (acc, item) => acc + (Number(item.quantidade) || 0) * (Number(item.precoUnit) || 0),
+      (acc, item) =>
+        acc + (Number(item.quantidade) || 0) * (Number(item.precoUnit) || 0),
       0
     );
 

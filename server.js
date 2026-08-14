@@ -223,11 +223,11 @@ mongoose.connection.on(
 // ROTAS
 // ======================================================
 app.use("/api/orcamentos", orcamentoRoutes);
+app.use("/api/avaliacoes", require("./routes/avaliacoes"));
 
 app.use(
   "/api/auth",
-  require("./routes/auth")
-);
+  require("./routes/auth"));
 
 
 app.use(
