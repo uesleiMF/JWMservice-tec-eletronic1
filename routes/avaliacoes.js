@@ -72,6 +72,24 @@ router.post("/", protect, async (req, res) => {
 });
 
 // ======================================================
+// BUSCAR AVALIAÇÕES DO CLIENTE LOGADO
+// ======================================================
+router.get("/minhas", protect, async (req, res) => {
+  try {
+    const avaliacoes = await Avaliacao.find({ cliente: req.user._id })
+      .populate("profissional", "name foto")
+      .populate("order", "servico") // pega o nome do serviço se existir
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json(avaliacoes);
+  } catch (err) {
+    console.error("ERRO BUSCAR MINHAS AVALIAÇÕES:", err);
+    res.status(500).json({ message: "Erro ao buscar avaliações" });
+  }
+});
+
+// ======================================================
 // BUSCAR AVALIAÇÕES DE UM PROFISSIONAL
 // ======================================================
 router.get("/profissional/:id", async (req, res) => {
