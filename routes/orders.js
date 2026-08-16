@@ -14,7 +14,10 @@ router.post('/', protect, async (req, res) => {
       profissionalId,
       servico,
       descricao,
-      valor
+      valor,
+      endereco,          // ← novo
+      dataPreferencia,   // ← novo
+      periodo            // ← novo
     } = req.body;
 
     const clienteId = req.user._id;
@@ -34,7 +37,10 @@ router.post('/', protect, async (req, res) => {
       servico: servico.trim(),
       descricao: descricao || '',
       valor: Number(valor) || 0,
-      status: 'pendente'
+      status: 'pendente',
+      endereco: endereco || '',
+      dataPreferencia: dataPreferencia || null,
+      periodo: periodo || ''
     });
 
     // =============================
@@ -81,7 +87,7 @@ router.post('/', protect, async (req, res) => {
 });
 
 // ======================================================
-// LISTAR PEDIDOS DO CLIENTE LOGADO  ← NOVA ROTA
+// LISTAR PEDIDOS DO CLIENTE LOGADO
 // ======================================================
 router.get('/meus', protect, async (req, res) => {
   try {
