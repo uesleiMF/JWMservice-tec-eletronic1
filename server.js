@@ -224,6 +224,7 @@ mongoose.connection.on(
 // ======================================================
 app.use("/api/orcamentos", orcamentoRoutes);
 app.use("/api/avaliacoes", require("./routes/avaliacoes"));
+app.use("/api/notifications", require("./routes/notifications"));
 
 app.use(
   "/api/auth",

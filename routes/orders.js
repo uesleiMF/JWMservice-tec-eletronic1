@@ -1,30 +1,32 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const Order = require('../models/Order');
-const Conversation = require('../models/Conversation');
-const Avaliacao = require('../models/Avaliacao'); // ← adicione (se já tiver o model)
-const { protect } = require('../middleware/authMiddleware');
+const Order = require("../models/Order");
+const Conversation = require("../models/Conversation");
+const Avaliacao = require("../models/Avaliacao");
+const User = require("../models/User");
+const { protect } = require("../middleware/authMiddleware");
+const createNotification = require("../utils/createNotification");
 
 // ======================================================
 // CRIAR PEDIDO + CRIAR CONVERSA
 // ======================================================
-router.post('/', protect, async (req, res) => {
+router.post("/", protect, async (req, res) => {
   try {
     const {
       profissionalId,
       servico,
       descricao,
       valor,
-      endereco,          // ← novo
-      dataPreferencia,   // ← novo
-      periodo            // ← novo
+      endereco,
+      dataPreferencia,
+      periodo,
     } = req.body;
 
     const clienteId = req.user._id;
 
     if (!profissionalId || !servico) {
       return res.status(400).json({
-        message: 'Profissional e serviço são obrigatórios'
+        message: "Profissional e serviço são obrigatórios",
       });
     }
 
@@ -35,12 +37,12 @@ router.post('/', protect, async (req, res) => {
       cliente: clienteId,
       profissional: profissionalId,
       servico: servico.trim(),
-      descricao: descricao || '',
+      descricao: descricao || "",
       valor: Number(valor) || 0,
-      status: 'pendente',
-      endereco: endereco || '',
+      status: "pendente",
+      endereco: endereco || "",
       dataPreferencia: dataPreferencia || null,
-      periodo: periodo || ''
+      periodo: periodo || "",
     });
 
     // =============================
@@ -51,8 +53,8 @@ router.post('/', protect, async (req, res) => {
       orderId: order._id,
       metadata: {
         createdBy: clienteId,
-        source: 'order'
-      }
+        source: "order",
+      },
     });
 
     // =============================
@@ -62,26 +64,41 @@ router.post('/', protect, async (req, res) => {
     await order.save();
 
     // =============================
+    // NOTIFICAÇÃO PARA O PROFISSIONAL
+    // =============================
+    const cliente = await User.findById(clienteId).select("name");
+
+    await createNotification({
+      userId: profissionalId,
+      title: "Novo pedido recebido",
+      message: `${cliente?.name || "Um cliente"} solicitou o serviço: ${servico}`,
+      type: "order",
+      link: `/profissional/chat?conversation=${conversation._id}`, // ← agora vai pro chat
+    });
+
+    // =============================
     // RETORNO COMPLETO
     // =============================
     const finalOrder = await Order.findById(order._id)
-      .populate('cliente', 'name email phone foto role')
-      .populate('profissional', 'name email phone foto role')
-      .populate('conversation');
+      .populate("cliente", "name email phone foto role")
+      .populate("profissional", "name email phone foto role")
+      .populate("conversation");
 
-    const finalConversation = await Conversation.findById(conversation._id)
-      .populate('participants', 'name email phone foto role');
+    const finalConversation = await Conversation.findById(conversation._id).populate(
+      "participants",
+      "name email phone foto role"
+    );
 
     res.status(201).json({
       success: true,
       order: finalOrder,
-      conversation: finalConversation
+      conversation: finalConversation,
     });
   } catch (err) {
     console.error("❌ ERRO CRIAR PEDIDO:", err);
     res.status(500).json({
       message: "Erro ao criar pedido",
-      error: err.message
+      error: err.message,
     });
   }
 });
@@ -89,25 +106,22 @@ router.post('/', protect, async (req, res) => {
 // ======================================================
 // LISTAR PEDIDOS DO CLIENTE LOGADO
 // ======================================================
-router.get('/meus', protect, async (req, res) => {
+router.get("/meus", protect, async (req, res) => {
   try {
     const pedidos = await Order.find({ cliente: req.user._id })
-      .populate('profissional', 'name foto servico')
+      .populate("profissional", "name foto servico")
       .sort({ createdAt: -1 })
       .lean();
 
-    // Marca se já foi avaliado
     const pedidosComAvaliacao = await Promise.all(
       pedidos.map(async (pedido) => {
         let avaliado = false;
         try {
           avaliado = !!(await Avaliacao.exists({ order: pedido._id }));
-        } catch (e) {
-          // se o model Avaliacao ainda não existir, ignora
-        }
+        } catch (e) {}
         return {
           ...pedido,
-          avaliado
+          avaliado,
         };
       })
     );
@@ -122,20 +136,20 @@ router.get('/meus', protect, async (req, res) => {
 // ======================================================
 // PEDIDOS DO PROFISSIONAL
 // ======================================================
-router.get('/professional/:id', protect, async (req, res) => {
+router.get("/professional/:id", protect, async (req, res) => {
   try {
     const orders = await Order.find({
-      profissional: req.params.id
+      profissional: req.params.id,
     })
-      .populate('cliente', 'name email phone foto role')
-      .populate('conversation')
+      .populate("cliente", "name email phone foto role")
+      .populate("conversation")
       .sort({ createdAt: -1 });
 
     res.json(orders);
   } catch (err) {
     console.error("❌ ERRO BUSCAR PEDIDOS:", err);
     res.status(500).json({
-      message: "Erro ao buscar pedidos"
+      message: "Erro ao buscar pedidos",
     });
   }
 });
@@ -143,134 +157,146 @@ router.get('/professional/:id', protect, async (req, res) => {
 // ======================================================
 // ACEITAR PEDIDO
 // ======================================================
-router.patch('/:id/aceitar', protect, async (req, res) => {
+router.patch("/:id/aceitar", protect, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
 
     if (!order) {
-      return res.status(404).json({
-        message: "Pedido não encontrado"
-      });
+      return res.status(404).json({ message: "Pedido não encontrado" });
     }
 
     if (String(order.profissional) !== String(req.user._id)) {
-      return res.status(403).json({
-        message: "Sem permissão"
-      });
+      return res.status(403).json({ message: "Sem permissão" });
     }
 
     order.status = "aceito";
     await order.save();
 
+    // Notifica o cliente
+    await createNotification({
+      userId: order.cliente,
+      title: "Pedido aceito!",
+      message: `Seu pedido "${order.servico}" foi aceito pelo profissional.`,
+      type: "order",
+      link: "/cliente/pedidos",
+    });
+
     res.json({
       message: "Pedido aceito",
-      order
+      order,
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({
-      message: "Erro ao aceitar pedido"
-    });
+    res.status(500).json({ message: "Erro ao aceitar pedido" });
   }
 });
 
 // ======================================================
 // RECUSAR PEDIDO
 // ======================================================
-router.patch('/:id/recusar', protect, async (req, res) => {
+router.patch("/:id/recusar", protect, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
 
     if (!order) {
-      return res.status(404).json({
-        message: "Pedido não encontrado"
-      });
+      return res.status(404).json({ message: "Pedido não encontrado" });
     }
 
     if (String(order.profissional) !== String(req.user._id)) {
-      return res.status(403).json({
-        message: "Sem permissão"
-      });
+      return res.status(403).json({ message: "Sem permissão" });
     }
 
     order.status = "recusado";
     await order.save();
 
+    // Notifica o cliente
+    await createNotification({
+      userId: order.cliente,
+      title: "Pedido recusado",
+      message: `Seu pedido "${order.servico}" foi recusado.`,
+      type: "order",
+      link: "/cliente/pedidos",
+    });
+
     res.json({
       message: "Pedido recusado",
-      order
+      order,
     });
   } catch (err) {
-    res.status(500).json({
-      message: "Erro ao recusar pedido"
-    });
+    res.status(500).json({ message: "Erro ao recusar pedido" });
   }
 });
 
 // ======================================================
 // INICIAR SERVIÇO
 // ======================================================
-router.patch('/:id/iniciar', protect, async (req, res) => {
+router.patch("/:id/iniciar", protect, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
 
     if (!order) {
-      return res.status(404).json({
-        message: "Pedido não encontrado"
-      });
+      return res.status(404).json({ message: "Pedido não encontrado" });
     }
 
     if (String(order.profissional) !== String(req.user._id)) {
-      return res.status(403).json({
-        message: "Sem permissão"
-      });
+      return res.status(403).json({ message: "Sem permissão" });
     }
 
     order.status = "em_andamento";
     await order.save();
 
+    // Notifica o cliente
+    await createNotification({
+      userId: order.cliente,
+      title: "Serviço iniciado",
+      message: `O profissional iniciou o serviço "${order.servico}".`,
+      type: "order",
+      link: "/cliente/pedidos",
+    });
+
     res.json({
       message: "Serviço iniciado",
-      order
+      order,
     });
   } catch (err) {
-    res.status(500).json({
-      message: "Erro ao iniciar serviço"
-    });
+    res.status(500).json({ message: "Erro ao iniciar serviço" });
   }
 });
 
 // ======================================================
 // FINALIZAR SERVIÇO
 // ======================================================
-router.patch('/:id/finalizar', protect, async (req, res) => {
+router.patch("/:id/finalizar", protect, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
 
     if (!order) {
-      return res.status(404).json({
-        message: "Pedido não encontrado"
-      });
+      return res.status(404).json({ message: "Pedido não encontrado" });
     }
 
     if (String(order.profissional) !== String(req.user._id)) {
-      return res.status(403).json({
-        message: "Sem permissão"
-      });
+      return res.status(403).json({ message: "Sem permissão" });
     }
 
     order.status = "finalizado";
     order.dataFinalizacao = new Date();
     await order.save();
 
+    // Notifica o cliente
+    await createNotification({
+      userId: order.cliente,
+      title: "Serviço finalizado",
+      message: `O serviço "${order.servico}" foi finalizado. Você já pode avaliar!`,
+      type: "order",
+      link: "/cliente/pedidos",
+    });
+
     res.json({
       message: "Serviço finalizado",
-      order
+      order,
     });
   } catch (err) {
-    res.status(500).json({
-      message: "Erro ao finalizar serviço"
-    });
+    res.status(500).json({ message: "Erro ao finalizar serviço" });
   }
 });
 

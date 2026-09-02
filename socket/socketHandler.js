@@ -1,5 +1,7 @@
 const Message = require("../models/Message");
 const Conversation = require("../models/Conversation");
+const User = require("../models/User");
+const createNotification = require("../utils/createNotification");
 
 const onlineUsers = new Map(); // userId -> Set de socketIds
 
@@ -29,7 +31,7 @@ module.exports = (io) => {
     });
 
     // ======================================================
-    // PEDIR LISTA DE ONLINE (estava faltando!)
+    // PEDIR LISTA DE ONLINE
     // ======================================================
     socket.on("get-online-users", () => {
       socket.emit("online-users", Array.from(onlineUsers.keys()));
@@ -101,8 +103,27 @@ module.exports = (io) => {
           lastMessageAt: new Date(),
         });
 
+        // Emite a mensagem em tempo real
         io.to(String(conversationId)).emit("newMessage", message);
         console.log("💬 Mensagem criada:", message._id);
+
+        // ========== CRIA NOTIFICAÇÃO ==========
+        try {
+          const sender = await User.findById(senderId).select("name");
+          const senderName = sender?.name || "Alguém";
+
+          await createNotification({
+            userId: receiverId,
+            title: "Nova mensagem",
+            message: `${senderName}: ${text.trim().substring(0, 60)}${text.length > 60 ? "..." : ""}`,
+            type: "chat",
+            link: null, // você pode colocar "/cliente/chat" ou "/profissional/chat" se quiser
+          });
+        } catch (notifError) {
+          console.error("Erro ao criar notificação de chat:", notifError.message);
+        }
+        // =====================================
+
       } catch (error) {
         console.error("❌ Erro enviar mensagem:", error);
         socket.emit("error", { message: "Erro interno" });
